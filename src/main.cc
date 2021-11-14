@@ -74,6 +74,38 @@ void intersect_aabb_rays_single_origin(const glm::vec3& origin, glm::vec<3, floa
   }
 }
 
+float_v sampler3D(const RawVolume &volume, float_v xs, float_v ys, float_v zs, float_m mask) {
+  xs *= 255.f;
+  ys *= 255.f;
+  zs *= 255.f;
+
+  uint32_t_v pix_xs = xs;
+  uint32_t_v pix_ys = ys;
+  uint32_t_v pix_zs = zs;
+
+  float_v frac_xs = xs - pix_xs;
+  float_v frac_ys = ys - pix_ys;
+  float_v frac_zs = zs - pix_zs;
+
+  float_v accs[4];
+
+  for (uint32_t k = 0; k < simdlen; k++) {
+    if (mask[k]) {
+      accs[0][k] = volume(pix_xs[k], pix_ys[k],     pix_zs[k]    ) * (1 - frac_xs[k]) + volume(pix_xs[k] + 1, pix_ys[k]    , pix_zs[k]    ) * frac_xs[k];
+      accs[1][k] = volume(pix_xs[k], pix_ys[k] + 1, pix_zs[k]    ) * (1 - frac_xs[k]) + volume(pix_xs[k] + 1, pix_ys[k] + 1, pix_zs[k]    ) * frac_xs[k];
+      accs[2][k] = volume(pix_xs[k], pix_ys[k],     pix_zs[k] + 1) * (1 - frac_xs[k]) + volume(pix_xs[k] + 1, pix_ys[k]    , pix_zs[k] + 1) * frac_xs[k];
+      accs[3][k] = volume(pix_xs[k], pix_ys[k] + 1, pix_zs[k] + 1) * (1 - frac_xs[k]) + volume(pix_xs[k] + 1, pix_ys[k] + 1, pix_zs[k] + 1) * frac_xs[k];
+    }
+  }
+
+  accs[0] = accs[0] * (1 - frac_ys) + accs[1] * frac_ys;
+  accs[1] = accs[2] * (1 - frac_ys) + accs[3] * frac_ys;
+
+  accs[0] = accs[0] * (1 - frac_zs) + accs[1] * frac_zs;
+
+  return accs[0];
+};
+
 int main(int argc, char *argv[]) {
   glm::vec3 volume_min {-.5, -.5, -.5};
   glm::vec3 volume_max {+.5, +.5, +.5};
@@ -104,38 +136,6 @@ int main(int argc, char *argv[]) {
   if (!volume) {
     return 1;
   }
-
-  auto sampler = [&volume](float_v xs, float_v ys, float_v zs, float_m mask) {
-    xs *= 255.f;
-    ys *= 255.f;
-    zs *= 255.f;
-
-    uint32_t_v pix_xs = xs;
-    uint32_t_v pix_ys = ys;
-    uint32_t_v pix_zs = zs;
-
-    float_v frac_xs = xs - pix_xs;
-    float_v frac_ys = ys - pix_ys;
-    float_v frac_zs = zs - pix_zs;
-
-    float_v accs[4];
-
-    for (uint32_t k = 0; k < simdlen; k++) {
-      if (mask[k]) {
-        accs[0][k] = volume(pix_xs[k], pix_ys[k],     pix_zs[k]    ) * (1 - frac_xs[k]) + volume(pix_xs[k] + 1, pix_ys[k]    , pix_zs[k]    ) * frac_xs[k];
-        accs[1][k] = volume(pix_xs[k], pix_ys[k] + 1, pix_zs[k]    ) * (1 - frac_xs[k]) + volume(pix_xs[k] + 1, pix_ys[k] + 1, pix_zs[k]    ) * frac_xs[k];
-        accs[2][k] = volume(pix_xs[k], pix_ys[k],     pix_zs[k] + 1) * (1 - frac_xs[k]) + volume(pix_xs[k] + 1, pix_ys[k]    , pix_zs[k] + 1) * frac_xs[k];
-        accs[3][k] = volume(pix_xs[k], pix_ys[k] + 1, pix_zs[k] + 1) * (1 - frac_xs[k]) + volume(pix_xs[k] + 1, pix_ys[k] + 1, pix_zs[k] + 1) * frac_xs[k];
-      }
-    }
-
-    accs[0] = accs[0] * (1 - frac_ys) + accs[1] * frac_ys;
-    accs[1] = accs[2] * (1 - frac_ys) + accs[3] * frac_ys;
-
-    accs[0] = accs[0] * (1 - frac_zs) + accs[1] * frac_zs;
-
-    return accs[0];
-  };
 
   ColorGradient1D<glm::vec4> transfer {};
 
@@ -191,7 +191,7 @@ int main(int argc, char *argv[]) {
 
           glm::vec<3, float_v> vs = glm::vec<3, float_v>(origin) + ray_directions * (tmins + steps / 2.f) + float_v(0.5f);
 
-          float_v values = sampler(vs.x, vs.y, vs.z, mask);
+          float_v values = sampler3D(volume, vs.x, vs.y, vs.z, mask);
 
           glm::vec<4, float_v> srcs {};
           for (std::size_t k = 0; k < simdlen; k++) {
