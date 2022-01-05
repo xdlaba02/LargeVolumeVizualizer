@@ -92,6 +92,10 @@ float_v sampler3D(const RawVolume &volume, float_v xs, float_v ys, float_v zs, f
   uint32_t height = volume.height();
   uint32_t depth = volume.depth();
 
+  float_m incrementable_xs = pix_xs < (width - 1);
+  float_m incrementable_ys = pix_ys < (height - 1);
+  float_m incrementable_zs = pix_zs < (depth - 1);
+
   float_v accs[2][2][2];
 
   float_v::IndexType indices_z = (pix_zs * height + pix_ys) * width + pix_xs;
@@ -109,13 +113,13 @@ float_v sampler3D(const RawVolume &volume, float_v xs, float_v ys, float_v zs, f
           }
         }
 
-        indices_xyz(pix_xs < (width - 2)) += 1; // FIXME
+        indices_xyz(incrementable_xs) += 1;
       }
 
-      indices_yz(pix_ys < (height - 2)) += width; // FIXME
+      indices_yz(incrementable_ys) += width;
     }
 
-    indices_z(pix_zs < (depth - 2)) += height; // FIXME
+    indices_z(incrementable_zs) += width * height;
   }
 
   accs[0][0][0] = accs[0][0][0] * (1 - frac_xs) + accs[0][0][1] * frac_xs;
