@@ -48,8 +48,6 @@ public:
         float frac = diff ? (value - lowerIt->first) / diff : 0.5f;
         return lowerIt->second * (1 - frac) + upperIt->second * frac;
     }
-
-    void clear() { m_colors.clear(); }
 };
 
 
@@ -73,6 +71,21 @@ void intersect_aabb_rays_single_origin(const glm::vec3& origin, glm::vec<3, floa
     tmaxs(t1 < tmaxs) = t1;
   }
 }
+
+float_v sampler1D(const float *data, uint32_t size, float_v values, float_m mask) {
+  uint32_v pix = values;
+  float_v frac = values - pix;
+
+  float_v accs[2];
+
+  accs[0].gather(data, pix, mask);
+
+  pix(pix < (size - 1))++;
+
+  accs[1].gather(data, pix, mask);
+
+  return accs[0] * (1 - frac) + accs[1] * frac;
+};
 
 float_v sampler3D(const RawVolume &volume, float_v xs, float_v ys, float_v zs, float_m mask) {
   xs *= 255.f;
@@ -136,19 +149,13 @@ float_v sampler3D(const RawVolume &volume, float_v xs, float_v ys, float_v zs, f
 };
 
 int main(int argc, char *argv[]) {
-  glm::vec3 volume_min {-.5, -.5, -.5};
-  glm::vec3 volume_max {+.5, +.5, +.5};
-
-  constexpr std::size_t width = 1920;
-  constexpr std::size_t height = 1080;
-  constexpr float stepsize = 0.1f;
-
-  std::vector<uint8_t> raster(width * height * 3);
-
   if (!glfwInit()) {
       printf("Couldn't init GLFW\n");
       return 1;
   }
+
+  constexpr std::size_t width = 1920;
+  constexpr std::size_t height = 1080;
 
   GLFWwindow *window = glfwCreateWindow(width, height, "Hello World", NULL, NULL);
   if (!window) {
@@ -158,46 +165,59 @@ int main(int argc, char *argv[]) {
 
   glfwMakeContextCurrent(window);
 
-  constexpr float aspect = float(width) / float(height);
-  float cameraFOV = std::tan(45 * M_PI / 180 * 0.5);
-
   RawVolume volume(argv[1], 256, 256, 256);
   if (!volume) {
     return 1;
   }
 
-  ColorGradient1D<glm::vec3> colorTransfer {};
+  std::array<float, 256> transferR {};
+  std::array<float, 256> transferG {};
+  std::array<float, 256> transferB {};
+  std::array<float, 256> transferA {};
 
-  colorTransfer.setColor(58.f,  {0.0f, 0.90f, 0.0f});
-  colorTransfer.setColor(59.f,  {0.0f, 0.00f, 0.0f});
-  colorTransfer.setColor(60.f,  {0.7f, 0.35f, 0.0f});
-  colorTransfer.setColor(255.f, {0.9f, 0.55f, 0.0f});
+  {
+      ColorGradient1D<glm::vec3> colorGradient {};
 
-  ColorGradient1D<float> alphaTransfer {};
+      colorGradient.setColor(58.f,  {0.0f, 0.90f, 0.0f});
+      colorGradient.setColor(59.f,  {0.0f, 0.00f, 0.0f});
+      colorGradient.setColor(60.f,  {0.7f, 0.35f, 0.0f});
+      colorGradient.setColor(255.f, {0.9f, 0.55f, 0.0f});
 
-  alphaTransfer.setColor(35.f,  0.0f);
-  alphaTransfer.setColor(40.f,  0.5f);
-  alphaTransfer.setColor(255.f, 0.8f);
+      ColorGradient1D<float> alphaGradient {};
 
-  uint32_v offsets {};
+      alphaGradient.setColor(35.f,  0.0f);
+      alphaGradient.setColor(40.f,  0.5f);
+      alphaGradient.setColor(255.f, 0.8f);
 
-  for (std::size_t k = 0; k < simdlen; k++) {
-    offsets[k] = k * 3;
+      for (size_t i = 0; i < 256; i++) {
+        glm::vec3 color = colorGradient.color(i);
+        float alpha = alphaGradient.color(i);
+        transferR[i] = color.r;
+        transferG[i] = color.g;
+        transferB[i] = color.b;
+        transferA[i] = alpha;
+      }
   }
+
+  std::vector<uint8_t> raster(width * height * 3);
 
   float time = 0.f;
   while (!glfwWindowShouldClose(window)) {
 
     glm::vec3 origin = glm::normalize(glm::vec3(std::sin(time) * 2, std::cos(time), std::cos(time) * 2)) * (std::sin(time / 4) + 3);
-
     glm::mat4 view = glm::lookAt(origin, { 0, 0, 0 }, {0, 1, 0 });
 
     #pragma omp parallel for
     for (uint32_t j = 0; j < height; j++) {
+
+      constexpr float cameraFOV = std::tan(45 * M_PI / 180 * 0.5);
+
       float y = (2 * (j + 0.5) / height - 1) * cameraFOV;
 
       for (uint32_t i = 0; i < width; i += simdlen) {
-        float_v is = float_v(Vc::IndexesFromZero) + i;
+        float_v is = float_v::IndexesFromZero() + i;
+
+        constexpr float aspect = float(width) / float(height);
 
         float_v xs = (2 * (is + 0.5f) / float(width) - 1) * aspect * cameraFOV;
 
@@ -211,9 +231,11 @@ int main(int argc, char *argv[]) {
         }
 
         float_v tmins, tmaxs;
-        intersect_aabb_rays_single_origin(origin, ray_directions, volume_min, volume_max, tmins, tmaxs);
+        intersect_aabb_rays_single_origin(origin, ray_directions, {-.5, -.5, -.5}, {+.5, +.5, +.5}, tmins, tmaxs);
 
         glm::vec<4, float_v> dsts(0.f);
+
+        constexpr float stepsize = 0.01f;
 
         for (float_m mask = tmins <= tmaxs; !mask.isEmpty(); mask &= tmins <= tmaxs) {
           float_v steps = Vc::min(stepsize, tmaxs - tmins);
@@ -222,18 +244,14 @@ int main(int argc, char *argv[]) {
 
           float_v values = sampler3D(volume, vs.x, vs.y, vs.z, mask);
 
-          glm::vec<4, float_v> srcs {};
-          for (std::size_t k = 0; k < simdlen; k++) {
-            if (mask[k]) {
-              glm::vec3 src = colorTransfer.color(values[k]);
-              srcs.r[k] = src.r;
-              srcs.g[k] = src.g;
-              srcs.b[k] = src.b;
-              srcs.a[k] = alphaTransfer.color(values[k]);
-            }
-          }
+          glm::vec<4, float_v> srcs {
+            sampler1D(transferR.data(), transferR.size(), values, mask),
+            sampler1D(transferG.data(), transferG.size(), values, mask),
+            sampler1D(transferB.data(), transferB.size(), values, mask),
+            sampler1D(transferA.data(), transferA.size(), values, mask)
+          };
 
-          srcs.a = float_v(1.f) - Vc::exp(-srcs.a * steps);
+          srcs.a = float_v(1.f) - Vc::exp(-srcs.a * steps * 5);
 
           srcs.r *= srcs.a;
           srcs.g *= srcs.a;
@@ -255,9 +273,9 @@ int main(int argc, char *argv[]) {
         float_v gs = (dsts.g + (1 - dsts.a)) * 255;
         float_v bs = (dsts.b + (1 - dsts.a)) * 255;
 
-        rs.scatter(raster.data() + (j * width + i) * 3 + 0, offsets);
-        gs.scatter(raster.data() + (j * width + i) * 3 + 1, offsets);
-        bs.scatter(raster.data() + (j * width + i) * 3 + 2, offsets);
+        rs.scatter(raster.data() + (j * width + i) * 3 + 0, uint32_v::IndexesFromZero() * 3);
+        gs.scatter(raster.data() + (j * width + i) * 3 + 1, uint32_v::IndexesFromZero() * 3);
+        bs.scatter(raster.data() + (j * width + i) * 3 + 2, uint32_v::IndexesFromZero() * 3);
       }
     }
 
