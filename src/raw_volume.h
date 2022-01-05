@@ -45,7 +45,11 @@ public:
     }
   }
 
-  operator void *() { return m_data; }
+  operator void *() const { return m_data; }
+
+  size_t width()  const { return m_width; }
+  size_t height() const { return m_height; }
+  size_t depth()  const { return m_depth; }
 
   uint16_t operator()(size_t x, size_t y, size_t z) const {
     switch (m_bytes_per_voxel) {

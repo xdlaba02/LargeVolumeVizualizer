@@ -17,7 +17,7 @@ using Vc::float_m;
 
 constexpr std::size_t simdlen = float_v::size();
 
-using uint32_t_v = Vc::SimdArray<uint32_t, simdlen>;
+using uint32_v = Vc::SimdArray<uint32_t, simdlen>;
 
 template <typename ColorType>
 class ColorGradient1D {
@@ -79,31 +79,56 @@ float_v sampler3D(const RawVolume &volume, float_v xs, float_v ys, float_v zs, f
   ys *= 255.f;
   zs *= 255.f;
 
-  uint32_t_v pix_xs = xs;
-  uint32_t_v pix_ys = ys;
-  uint32_t_v pix_zs = zs;
+  uint32_v pix_xs = xs;
+  uint32_v pix_ys = ys;
+  uint32_v pix_zs = zs;
 
   float_v frac_xs = xs - pix_xs;
   float_v frac_ys = ys - pix_ys;
   float_v frac_zs = zs - pix_zs;
 
-  float_v accs[4];
+  const uint8_t *data = static_cast<uint8_t *>((void *)volume);
+  uint32_t width = volume.width();
+  uint32_t height = volume.height();
+  uint32_t depth = volume.depth();
 
-  for (uint32_t k = 0; k < simdlen; k++) {
-    if (mask[k]) {
-      accs[0][k] = volume(pix_xs[k], pix_ys[k],     pix_zs[k]    ) * (1 - frac_xs[k]) + volume(pix_xs[k] + 1, pix_ys[k]    , pix_zs[k]    ) * frac_xs[k];
-      accs[1][k] = volume(pix_xs[k], pix_ys[k] + 1, pix_zs[k]    ) * (1 - frac_xs[k]) + volume(pix_xs[k] + 1, pix_ys[k] + 1, pix_zs[k]    ) * frac_xs[k];
-      accs[2][k] = volume(pix_xs[k], pix_ys[k],     pix_zs[k] + 1) * (1 - frac_xs[k]) + volume(pix_xs[k] + 1, pix_ys[k]    , pix_zs[k] + 1) * frac_xs[k];
-      accs[3][k] = volume(pix_xs[k], pix_ys[k] + 1, pix_zs[k] + 1) * (1 - frac_xs[k]) + volume(pix_xs[k] + 1, pix_ys[k] + 1, pix_zs[k] + 1) * frac_xs[k];
+  float_v accs[2][2][2];
+
+  float_v::IndexType indices_z = (pix_zs * height + pix_ys) * width + pix_xs;
+  for (size_t z = 0; z < 2; z++) {
+
+    float_v::IndexType indices_yz = indices_z;
+    for (size_t y = 0; y < 2; y++) {
+
+      float_v::IndexType indices_xyz = indices_yz;
+      for (size_t x = 0; x < 2; x++) {
+
+        for (uint32_t k = 0; k < simdlen; k++) {
+          if (mask[k]) {
+            accs[z][y][x][k] = data[indices_xyz[k]];
+          }
+        }
+
+        indices_xyz(pix_xs < (width - 2)) += 1; // FIXME
+      }
+
+      indices_yz(pix_ys < (height - 2)) += width; // FIXME
     }
+
+    indices_z(pix_zs < (depth - 2)) += height; // FIXME
   }
 
-  accs[0] = accs[0] * (1 - frac_ys) + accs[1] * frac_ys;
-  accs[1] = accs[2] * (1 - frac_ys) + accs[3] * frac_ys;
+  accs[0][0][0] = accs[0][0][0] * (1 - frac_xs) + accs[0][0][1] * frac_xs;
+  accs[0][1][0] = accs[0][1][0] * (1 - frac_xs) + accs[0][1][1] * frac_xs;
+  accs[1][0][0] = accs[1][0][0] * (1 - frac_xs) + accs[1][0][1] * frac_xs;
+  accs[1][1][0] = accs[1][1][0] * (1 - frac_xs) + accs[1][1][1] * frac_xs;
 
-  accs[0] = accs[0] * (1 - frac_zs) + accs[1] * frac_zs;
+  accs[0][0][0] = accs[0][0][0] * (1 - frac_ys) + accs[0][1][0] * frac_ys;
+  accs[1][0][0] = accs[1][0][0] * (1 - frac_ys) + accs[1][1][0] * frac_ys;
 
-  return accs[0];
+  accs[0][0][0] = accs[0][0][0] * (1 - frac_zs) + accs[1][0][0] * frac_zs;
+
+  return accs[0][0][0];
 };
 
 int main(int argc, char *argv[]) {
@@ -112,7 +137,7 @@ int main(int argc, char *argv[]) {
 
   constexpr std::size_t width = 1920;
   constexpr std::size_t height = 1080;
-  constexpr float stepsize = 0.01f;
+  constexpr float stepsize = 0.1f;
 
   std::vector<uint8_t> raster(width * height * 3);
 
@@ -146,7 +171,7 @@ int main(int argc, char *argv[]) {
   transfer.setColor(60.f,  {0.7f, 0.35f, 0.0f, 0.5f});
   transfer.setColor(255.f, {0.9f, 0.55f, 0.0f, 0.8f});
 
-  uint32_t_v offsets {};
+  uint32_v offsets {};
 
   for (std::size_t k = 0; k < simdlen; k++) {
     offsets[k] = k * 3;
@@ -164,11 +189,7 @@ int main(int argc, char *argv[]) {
       float y = (2 * (j + 0.5) / height - 1) * cameraFOV;
 
       for (uint32_t i = 0; i < width; i += simdlen) {
-        float_v is {};
-
-        for (uint32_t k = 0; k < simdlen; k++) {
-          is[k] = float(i + k);
-        }
+        float_v is = float_v(Vc::IndexesFromZero) + i;
 
         float_v xs = (2 * (is + 0.5f) / float(width) - 1) * aspect * cameraFOV;
 
