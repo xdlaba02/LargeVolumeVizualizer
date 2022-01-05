@@ -166,14 +166,18 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  ColorGradient1D<glm::vec4> transfer {};
+  ColorGradient1D<glm::vec3> colorTransfer {};
 
-  transfer.setColor(35.f,  {0.0f, 0.90f, 0.0f, 0.0f});
-  transfer.setColor(40.f,  {0.0f, 0.90f, 0.0f, 0.5f});
-  transfer.setColor(58.f,  {0.0f, 0.90f, 0.0f, 0.5f});
-  transfer.setColor(59.f,  {0.0f, 0.00f, 0.0f, 0.5f});
-  transfer.setColor(60.f,  {0.7f, 0.35f, 0.0f, 0.5f});
-  transfer.setColor(255.f, {0.9f, 0.55f, 0.0f, 0.8f});
+  colorTransfer.setColor(58.f,  {0.0f, 0.90f, 0.0f});
+  colorTransfer.setColor(59.f,  {0.0f, 0.00f, 0.0f});
+  colorTransfer.setColor(60.f,  {0.7f, 0.35f, 0.0f});
+  colorTransfer.setColor(255.f, {0.9f, 0.55f, 0.0f});
+
+  ColorGradient1D<float> alphaTransfer {};
+
+  alphaTransfer.setColor(35.f,  0.0f);
+  alphaTransfer.setColor(40.f,  0.5f);
+  alphaTransfer.setColor(255.f, 0.8f);
 
   uint32_v offsets {};
 
@@ -211,7 +215,7 @@ int main(int argc, char *argv[]) {
 
         glm::vec<4, float_v> dsts(0.f);
 
-        for (float_m mask = tmins <= tmaxs; !mask.isEmpty(); mask = tmins <= tmaxs) {
+        for (float_m mask = tmins <= tmaxs; !mask.isEmpty(); mask &= tmins <= tmaxs) {
           float_v steps = Vc::min(stepsize, tmaxs - tmins);
 
           glm::vec<3, float_v> vs = glm::vec<3, float_v>(origin) + ray_directions * (tmins + steps / 2.f) + float_v(0.5f);
@@ -220,14 +224,16 @@ int main(int argc, char *argv[]) {
 
           glm::vec<4, float_v> srcs {};
           for (std::size_t k = 0; k < simdlen; k++) {
-            glm::vec4 src = transfer.color(values[k]);
-            srcs.x[k] = src.x;
-            srcs.y[k] = src.y;
-            srcs.z[k] = src.z;
-            srcs.w[k] = src.w;
+            if (mask[k]) {
+              glm::vec3 src = colorTransfer.color(values[k]);
+              srcs.r[k] = src.r;
+              srcs.g[k] = src.g;
+              srcs.b[k] = src.b;
+              srcs.a[k] = alphaTransfer.color(values[k]);
+            }
           }
 
-          srcs.a *= steps;
+          srcs.a = float_v(1.f) - Vc::exp(-srcs.a * steps);
 
           srcs.r *= srcs.a;
           srcs.g *= srcs.a;
@@ -235,12 +241,14 @@ int main(int argc, char *argv[]) {
 
           // Evaluate the current opacity
           glm::vec<4, float_v> tmp = (1 - dsts.a) * srcs;
-          dsts.x(mask) += tmp.x;
-          dsts.y(mask) += tmp.y;
-          dsts.z(mask) += tmp.z;
-          dsts.w(mask) += tmp.w;
+          dsts.r(mask) += tmp.r;
+          dsts.g(mask) += tmp.g;
+          dsts.b(mask) += tmp.b;
+          dsts.a(mask) += tmp.a;
 
-          tmins += stepsize;
+          mask &= dsts.a < 0.99f;
+
+          tmins(mask) += stepsize;
         }
 
         float_v rs = (dsts.r + (1 - dsts.a)) * 255;
