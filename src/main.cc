@@ -88,9 +88,14 @@ float_v sampler1D(const float *data, uint32_t size, float_v values, float_m mask
 };
 
 float_v sampler3D(const RawVolume &volume, float_v xs, float_v ys, float_v zs, float_m mask) {
-  xs *= 255.f;
-  ys *= 255.f;
-  zs *= 255.f;
+  const uint8_t *data = static_cast<uint8_t *>((void *)volume);
+  uint32_t width = volume.width();
+  uint32_t height = volume.height();
+  uint32_t depth = volume.depth();
+
+  xs *= width - 1;
+  ys *= height - 1;
+  zs *= depth - 1;
 
   uint32_v pix_xs = xs;
   uint32_v pix_ys = ys;
@@ -99,11 +104,6 @@ float_v sampler3D(const RawVolume &volume, float_v xs, float_v ys, float_v zs, f
   float_v frac_xs = xs - pix_xs;
   float_v frac_ys = ys - pix_ys;
   float_v frac_zs = zs - pix_zs;
-
-  const uint8_t *data = static_cast<uint8_t *>((void *)volume);
-  uint32_t width = volume.width();
-  uint32_t height = volume.height();
-  uint32_t depth = volume.depth();
 
   float_m incrementable_xs = pix_xs < (width - 1);
   float_m incrementable_ys = pix_ys < (height - 1);
@@ -178,16 +178,17 @@ int main(int argc, char *argv[]) {
   {
       ColorGradient1D<glm::vec3> colorGradient {};
 
-      colorGradient.setColor(58.f,  {0.0f, 0.90f, 0.0f});
-      colorGradient.setColor(59.f,  {0.0f, 0.00f, 0.0f});
-      colorGradient.setColor(60.f,  {0.7f, 0.35f, 0.0f});
-      colorGradient.setColor(255.f, {0.9f, 0.55f, 0.0f});
+      colorGradient.setColor(80.f,  {0.75f, 0.5f, 0.25f});
+      colorGradient.setColor(82.f,  {1.00f, 1.0f, 0.85f});
 
       ColorGradient1D<float> alphaGradient {};
 
-      alphaGradient.setColor(35.f,  0.0f);
-      alphaGradient.setColor(40.f,  0.5f);
-      alphaGradient.setColor(255.f, 0.8f);
+      alphaGradient.setColor(40.f,  0.0f);
+      alphaGradient.setColor(60.f,  0.1f);
+      alphaGradient.setColor(63.f,  0.05f);
+      alphaGradient.setColor(80.f,  0.00f);
+      alphaGradient.setColor(82.f,  2.00f);
+      alphaGradient.setColor(255.f, 5.00f);
 
       for (size_t i = 0; i < 256; i++) {
         glm::vec3 color = colorGradient.color(i);
@@ -204,8 +205,12 @@ int main(int argc, char *argv[]) {
   float time = 0.f;
   while (!glfwWindowShouldClose(window)) {
 
-    glm::vec3 origin = glm::normalize(glm::vec3(std::sin(time) * 2, std::cos(time), std::cos(time) * 2)) * (std::sin(time / 4) + 3);
-    glm::mat4 view = glm::lookAt(origin, { 0, 0, 0 }, {0, 1, 0 });
+    glm::mat4 model = glm::rotate(glm::mat4(1.0f), time, glm::vec3(0.0, 1.0, 0.0)) * glm::rotate(glm::mat4(1.0f), glm::radians(90.f), glm::vec3(1.0, 0.0, 0.0)) * glm::scale(glm::mat4(1.0f), glm::vec3(1.25f, 1.f, 1.f));
+
+    glm::vec3 origin = glm::vec3(1, 0, 0) * 2.f;
+    glm::mat4 view = glm::lookAt(origin, { 0, 0, 0 }, {0, 1, 0 }) * model;
+
+    origin = glm::vec4(origin, 1) * model;
 
     #pragma omp parallel for
     for (uint32_t j = 0; j < height; j++) {
@@ -240,7 +245,7 @@ int main(int argc, char *argv[]) {
         for (float_m mask = tmins <= tmaxs; !mask.isEmpty(); mask &= tmins <= tmaxs) {
           float_v steps = Vc::min(stepsize, tmaxs - tmins);
 
-          glm::vec<3, float_v> vs = glm::vec<3, float_v>(origin) + ray_directions * (tmins + steps / 2.f) + float_v(0.5f);
+          glm::vec<3, float_v> vs = glm::vec<3, float_v>(origin) + ray_directions * (tmins + steps / 2.f) + glm::vec<3, float_v>{float_v(0.5f), float_v(0.5f), float_v(0.5f)};
 
           float_v values = sampler3D(volume, vs.x, vs.y, vs.z, mask);
 
