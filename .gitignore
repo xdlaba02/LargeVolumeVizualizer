@@ -1,3 +1,5 @@
 build
+debug
+release
 .ccls-cache
 compile_commands.json
