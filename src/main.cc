@@ -9,6 +9,7 @@
 #include <Vc/Vc>
 
 #include <iostream>
+#include <sstream>
 #include <vector>
 #include <cmath>
 
@@ -52,7 +53,7 @@ public:
 };
 
 
-void intersect_aabb_rays_single_origin(const glm::vec3& origin, glm::vec<3, float_v> ray_directions, const glm::vec3 &min, const glm::vec3 &max, float_v& tmins, float_v& tmaxs) {
+inline void intersect_aabb_rays_single_origin(const glm::vec3& origin, glm::vec<3, float_v> ray_directions, const glm::vec3 &min, const glm::vec3 &max, float_v& tmins, float_v& tmaxs) {
   ray_directions = glm::vec<3, float_v>{1, 1, 1} / ray_directions;
 
   tmins = -std::numeric_limits<float>::infinity();
@@ -74,18 +75,18 @@ void intersect_aabb_rays_single_origin(const glm::vec3& origin, glm::vec<3, floa
 }
 
 template <typename T>
-constexpr T interleave_4b_3d(T v) {
+inline constexpr T interleave_4b_3d(T v) {
   v = (v | (v << 4)) & 0x0C3;
   return (v | (v << 2)) & 0x249;
 }
 
 template <typename T>
-constexpr T morton_combine_interleaved(T x, T y, T z) {
+inline constexpr T morton_combine_interleaved(T x, T y, T z) {
   return x | (y << 1) | (z << 2);
 }
 
 template <typename T>
-constexpr T morton_index_4b_3d(T x, T y, T z) {
+inline constexpr T morton_index_4b_3d(T x, T y, T z) {
   return morton_combine_interleaved(interleave_4b_3d(x), interleave_4b_3d(y), interleave_4b_3d(z));
 }
 
@@ -112,20 +113,20 @@ constexpr std::array<uint32_t, 16 * 16 * 16> morton_table = generate_morton_tabl
 
 // fast division by 15 in 32 bit register, maximum viable number this can divide correctly is 74908, which should be sufficient
 template <typename T>
-T div_by_15(T n) {
+inline T div_by_15(T n) {
   return (n * 0x8889) >> 19;
 }
 
 #else
 
 template <typename T>
-T div_by_15(T n) {
+inline T div_by_15(T n) {
   return n / 15;
 }
 
 #endif
 
-float_v sampler1D(const float *data, float_v values) {
+inline float_v sampler1D(const float *data, float_v values) {
   uint32_v pix = values;
 
   float_v accs[2];
@@ -156,13 +157,13 @@ inline float_v sampler3D(const RawVolume &volume, float_v xs, float_v ys, float_
 
   int32_v buffers[2][2][2];
 
-  float_v::IndexType indices_z = (pix_zs * height + pix_ys) * width + pix_xs;
+  uint32_v indices_z = (simd_cast<uint32_v>(pix_zs) * height + pix_ys) * width + pix_xs;
   for (uint32_t z = 0; z < 2; z++) {
 
-    float_v::IndexType indices_yz = indices_z;
+    uint32_v indices_yz = indices_z;
     for (uint32_t y = 0; y < 2; y++) {
 
-      float_v::IndexType indices_xyz = indices_yz;
+      uint32_v indices_xyz = indices_yz;
       for (uint32_t x = 0; x < 2; x++) {
 
         for (uint32_t k = 0; k < simdlen; k++) {
@@ -195,7 +196,7 @@ inline float_v sampler3D(const RawVolume &volume, float_v xs, float_v ys, float_
   return accs[0][0];
 };
 
-inline float_v sampler3DBlocked(const uint8_t *volume, uint32_t z_stride, uint32_t y_stride, uint32_t x_stride, float_v xs, float_v ys, float_v zs, float_m mask) {
+inline float_v sampler3DBlocked(const uint8_t *volume, uint32_t block_z_stride, uint32_t block_y_stride, uint32_t block_x_stride, float_v xs, float_v ys, float_v zs, float_m mask) {
   uint32_v pix_xs = xs;
   uint32_v pix_ys = ys;
   uint32_v pix_zs = zs;
@@ -213,7 +214,7 @@ inline float_v sampler3DBlocked(const uint8_t *volume, uint32_t z_stride, uint32
   uint32_v in_block_ys = pix_ys - ((block_ys << 4) - block_ys);
   uint32_v in_block_zs = pix_zs - ((block_zs << 4) - block_zs);
 
-  uint32_v block_start_index = block_zs * z_stride + block_ys * y_stride + block_xs * x_stride;
+  uint32_v block_start_index = block_zs * block_z_stride + block_ys * block_y_stride + block_xs * block_x_stride;
 
   uint32_v indices[2][2][2];
 
@@ -298,10 +299,10 @@ int main(int argc, char *argv[]) {
       return 1;
   }
 
-  constexpr uint32_t width = 1920;
-  constexpr uint32_t height = 1080;
+  constexpr uint32_t window_width = 1920;
+  constexpr uint32_t window_height = 1080;
 
-  GLFWwindow *window = glfwCreateWindow(width, height, "Ahoj", NULL, NULL);
+  GLFWwindow *window = glfwCreateWindow(window_width, window_height, "Ahoj", NULL, NULL);
   if (!window) {
       printf("Couldn't open window\n");
       return 1;
@@ -309,21 +310,39 @@ int main(int argc, char *argv[]) {
 
   glfwMakeContextCurrent(window);
 
-  RawVolume volume(argv[1], 916, 952, 844);
+  uint32_t width;
+  uint32_t height;
+  uint32_t depth;
+
+  {
+    std::stringstream wstream(argv[2]);
+    std::stringstream hstream(argv[3]);
+    std::stringstream dstream(argv[4]);
+    wstream >> width;
+    hstream >> height;
+    dstream >> depth;
+  }
+
+
+  RawVolume volume(argv[1], width, height, depth);
   if (!volume) {
+    std::cerr << "couldn't open volume\n";
     return 1;
   }
 
-  uint32_t width_in_blocks  = (volume.width()  + 14) / 15;
-  uint32_t height_in_blocks = (volume.height() + 14) / 15;
-  uint32_t depth_in_blocks  = (volume.depth()  + 14) / 15;
+  uint32_t x_stride = 1;
+  uint32_t y_stride = width * x_stride;
+  uint32_t z_stride = height * y_stride;
 
+  uint32_t width_in_blocks  = (width  + 14) / 15;
+  uint32_t height_in_blocks = (height + 14) / 15;
+  uint32_t depth_in_blocks  = (depth  + 14) / 15;
 
-  uint32_t x_stride = 4096;
-  uint32_t y_stride = width_in_blocks * x_stride;
-  uint32_t z_stride = height_in_blocks * y_stride;
+  uint64_t block_x_stride = 4096;
+  uint64_t block_y_stride = width_in_blocks * block_x_stride;
+  uint64_t block_z_stride = height_in_blocks * block_y_stride;
 
-  uint32_t blocked_size = depth_in_blocks * z_stride;
+  uint64_t blocked_size = depth_in_blocks * block_z_stride;
 
   std::string blocked_file_name = std::string(argv[1]) + ".blocked";
 
@@ -347,30 +366,27 @@ int main(int argc, char *argv[]) {
         for (uint32_t block_y = 0; block_y < height_in_blocks; block_y++) {
           for (uint32_t block_x = 0; block_x < width_in_blocks; block_x++) {
 
-            uint32_t block_index = (block_z * height_in_blocks + block_y) * width_in_blocks + block_x;
-            uint32_t block_start_index = block_index * 4096;
+            uint8_t *block = &blocked_volume[block_z * block_z_stride + block_y * block_y_stride + block_x * block_x_stride];
 
             for (uint32_t z = 0; z < 16; z++) {
 
               uint32_t z_interleaved = interleave_4b_3d(z);
+              uint64_t original_z = std::min(block_z * 15 + z, depth - 1);
 
               for (uint32_t y = 0; y < 16; y++) {
 
                 uint32_t y_interleaved = interleave_4b_3d(y);
+                uint64_t original_y = std::min(block_y * 15 + y, height - 1);
 
                 for (uint32_t x = 0; x < 16; x++) {
 
                   uint32_t x_interleaved = interleave_4b_3d(x);
-
-                  uint32_t original_x = std::min(block_x * 15 + x, volume.width() - 1);
-                  uint32_t original_y = std::min(block_y * 15 + y, volume.height() - 1);
-                  uint32_t original_z = std::min(block_z * 15 + z, volume.depth() - 1);
-
-                  uint32_t original_index = (original_z * volume.height() + original_y) * volume.width() + original_x;
+                  uint64_t original_x = std::min(block_x * 15 + x, width - 1);
 
                   uint32_t in_block_index = morton_combine_interleaved(x_interleaved, y_interleaved, z_interleaved);
+                  uint64_t original_index = original_z * z_stride + original_y * y_stride + original_x * x_stride;
 
-                  blocked_volume[block_start_index + in_block_index] = ((const uint8_t *)(const void *)volume)[original_index];
+                  block[in_block_index] = ((const uint8_t *)(const void *)volume)[original_index];
                 }
               }
             }
@@ -410,12 +426,15 @@ int main(int argc, char *argv[]) {
 
       ColorGradient1D<float> alphaGradient {};
 
+      alphaGradient.setColor(151.f,  0.0f);
+      alphaGradient.setColor(152.f,  1.0f);
+      /*
       alphaGradient.setColor(40.f,  0.0f);
       alphaGradient.setColor(60.f,  0.1f);
       alphaGradient.setColor(63.f,  0.05f);
       alphaGradient.setColor(80.f,  0.00f);
-      alphaGradient.setColor(82.f,  2.00f);
-      alphaGradient.setColor(255.f, 5.00f);
+      alphaGradient.setColor(82.f,  1.00f);
+      */
 
       for (uint32_t i = 0; i < 256; i++) {
         glm::vec3 color = colorGradient.color(i);
@@ -427,10 +446,15 @@ int main(int argc, char *argv[]) {
       }
   }
 
-  std::vector<uint8_t> raster(width * height * 3);
+  std::vector<uint8_t> raster(window_width * window_height * 3);
+
+  size_t rgb_x_stride = 3;
+  size_t rgb_y_stride = window_width * rgb_x_stride;
+
+  uint32_v pixel_offsets = uint32_v::IndexesFromZero() * 3;
 
   float time = 0.f;
-  while (!glfwWindowShouldClose(window) && time < 10.f) {
+  while (!glfwWindowShouldClose(window) && time < 5.f) {
 
     glm::mat4 model = glm::rotate(glm::mat4(1.0f), time, glm::vec3(0.0, 1.0, 0.0)) * glm::rotate(glm::mat4(1.0f), glm::radians(90.f), glm::vec3(1.0, 0.0, 0.0));
 
@@ -440,19 +464,19 @@ int main(int argc, char *argv[]) {
     origin = glm::vec4(origin, 1) * model;
 
 
-    //#pragma omp parallel for schedule(dynamic)
-    for (uint32_t j = 0; j < height; j++) {
+    #pragma omp parallel for schedule(dynamic)
+    for (uint32_t j = 0; j < window_height; j++) {
 
       constexpr float cameraFOV = std::tan(45 * M_PI / 180 * 0.5);
 
-      float y = (2 * (j + 0.5) / height - 1) * cameraFOV;
+      float y = (2 * (j + 0.5) / window_height - 1) * cameraFOV;
 
-      for (uint32_t i = 0; i < width; i += simdlen) {
+      for (uint32_t i = 0; i < window_width; i += simdlen) {
         float_v is = float_v::IndexesFromZero() + i;
 
-        constexpr float aspect = float(width) / float(height);
+        constexpr float aspect = float(window_width) / float(window_height);
 
-        float_v xs = (2 * (is + 0.5f) / float(width) - 1) * aspect * cameraFOV;
+        float_v xs = (2 * (is + 0.5f) / float(window_width) - 1) * aspect * cameraFOV;
 
         glm::vec<3, float_v> ray_directions {};
 
@@ -466,7 +490,7 @@ int main(int argc, char *argv[]) {
         float_v tmins, tmaxs;
         intersect_aabb_rays_single_origin(origin, ray_directions, {-.5, -.5, -.5}, {+.5, +.5, +.5}, tmins, tmaxs);
 
-        glm::vec<4, float_v> dsts(0.f);
+        glm::vec<4, float_v> dsts(0.f, 0.f, 0.f, 1.f);
 
         constexpr float stepsize = 0.01f;
 
@@ -475,46 +499,41 @@ int main(int argc, char *argv[]) {
 
           glm::vec<3, float_v> vs = glm::vec<3, float_v>(origin) + ray_directions * (tmins + steps / 2.f) + float_v(0.5f);
 
-          float_v values = sampler3DBlocked(blocked_volume, z_stride, y_stride, x_stride, vs.x * (volume.width() - 1), vs.y * (volume.height() - 1), vs.z * (volume.depth() - 1), mask);
-          //float_v values = sampler3D(volume, vs.x * (volume.width() - 1), vs.y * (volume.height() - 1), vs.z * (volume.depth() - 1), mask);
+          float_v values = sampler3DBlocked(blocked_volume, block_z_stride, block_y_stride, block_x_stride, vs.x * (width - 1), vs.y * (height - 1), vs.z * (depth - 1), mask);
+          //float_v values = sampler3D(volume, vs.x * (width - 1), vs.y * (height - 1), vs.z * (depth - 1), mask);
 
-          glm::vec<4, float_v> srcs {
-            sampler1D(transferR.data(), values),
-            sampler1D(transferG.data(), values),
-            sampler1D(transferB.data(), values),
-            sampler1D(transferA.data(), values)
-          };
+          float_v r = sampler1D(transferR.data(), values);
+          float_v g = sampler1D(transferG.data(), values);
+          float_v b = sampler1D(transferB.data(), values);
+          float_v a = sampler1D(transferA.data(), values);
 
-          srcs.a = float_v(1.f) - Vc::exp(-srcs.a * steps * 10);
-
-          srcs.r *= srcs.a;
-          srcs.g *= srcs.a;
-          srcs.b *= srcs.a;
+          //a = float_v(1.f) - Vc::exp(-a * steps);
 
           // Evaluate the current opacity
-          glm::vec<4, float_v> tmp = (1 - dsts.a) * srcs;
-          dsts.r(mask) += tmp.r;
-          dsts.g(mask) += tmp.g;
-          dsts.b(mask) += tmp.b;
-          dsts.a(mask) += tmp.a;
+          dsts.r(mask) += r * a * dsts.a;
+          dsts.g(mask) += g * a * dsts.a;
+          dsts.b(mask) += b * a * dsts.a;
+          dsts.a(mask) *= 1 - a;
 
-          mask &= dsts.a < 0.99f;
+          mask &= dsts.a > 0.01f;
 
           tmins(mask) += stepsize;
         }
 
-        float_v rs = (dsts.r + (1 - dsts.a)) * 255;
-        float_v gs = (dsts.g + (1 - dsts.a)) * 255;
-        float_v bs = (dsts.b + (1 - dsts.a)) * 255;
+        float_v rs = (dsts.r + dsts.a) * 255;
+        float_v gs = (dsts.g + dsts.a) * 255;
+        float_v bs = (dsts.b + dsts.a) * 255;
 
-        rs.scatter(raster.data() + (j * width + i) * 3 + 0, uint32_v::IndexesFromZero() * 3);
-        gs.scatter(raster.data() + (j * width + i) * 3 + 1, uint32_v::IndexesFromZero() * 3);
-        bs.scatter(raster.data() + (j * width + i) * 3 + 2, uint32_v::IndexesFromZero() * 3);
+        uint8_t *rgb_start = raster.data() + j * rgb_y_stride + i * rgb_x_stride;
+
+        rs.scatter(rgb_start + 0, pixel_offsets);
+        gs.scatter(rgb_start + 1, pixel_offsets);
+        bs.scatter(rgb_start + 2, pixel_offsets);
       }
     }
 
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glDrawPixels(width, height, GL_RGB, GL_UNSIGNED_BYTE, raster.data());
+    glDrawPixels(window_width, window_height, GL_RGB, GL_UNSIGNED_BYTE, raster.data());
     glfwSwapBuffers(window);
     glfwPollEvents();
 
