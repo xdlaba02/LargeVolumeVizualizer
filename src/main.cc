@@ -90,25 +90,6 @@ inline constexpr T morton_index_4b_3d(T x, T y, T z) {
   return morton_combine_interleaved(interleave_4b_3d(x), interleave_4b_3d(y), interleave_4b_3d(z));
 }
 
-constexpr std::array<uint32_t, 16 * 16 * 16> generate_morton_table() {
-  std::array<uint32_t, 16 * 16 * 16> table {};
-
-  for (uint32_t z = 0; z < 16; z++) {
-    uint32_t z_interleaved = interleave_4b_3d(z);
-    for (uint32_t y = 0; y < 16; y++) {
-      uint32_t y_interleaved = interleave_4b_3d(y);
-      for (uint32_t x = 0; x < 16; x++) {
-        uint32_t x_interleaved = interleave_4b_3d(x);
-        table[x | y << 4 | z << 8] = morton_combine_interleaved(x_interleaved, y_interleaved, z_interleaved);
-      }
-    }
-  }
-
-  return table;
-}
-
-constexpr std::array<uint32_t, 16 * 16 * 16> morton_table = generate_morton_table();
-
 #if 1
 
 // fast division by 15 in 32 bit register, maximum viable number this can divide correctly is 74908, which should be sufficient
@@ -218,34 +199,6 @@ inline float_v sampler3DBlocked(const uint8_t *volume, uint32_t block_z_stride, 
 
   uint32_v indices[2][2][2];
 
-#if 0
-  uint32_v in_block_xs0 = in_block_xs + 0;
-  uint32_v in_block_xs1 = in_block_xs + 1;
-
-  uint32_v in_block_ys0 = (in_block_ys + 0) << 4;
-  uint32_v in_block_ys1 = (in_block_ys + 1) << 4;
-
-  uint32_v in_block_zs0 = (in_block_zs + 0) << 8;
-  uint32_v in_block_zs1 = (in_block_zs + 1) << 8;
-
-  indices[0][0][0].gather(morton_table.data(), in_block_xs0 | in_block_ys0 | in_block_zs0, mask);
-  indices[0][0][1].gather(morton_table.data(), in_block_xs1 | in_block_ys0 | in_block_zs0, mask);
-  indices[0][1][0].gather(morton_table.data(), in_block_xs0 | in_block_ys1 | in_block_zs0, mask);
-  indices[0][1][1].gather(morton_table.data(), in_block_xs1 | in_block_ys1 | in_block_zs0, mask);
-  indices[1][0][0].gather(morton_table.data(), in_block_xs0 | in_block_ys0 | in_block_zs1, mask);
-  indices[1][0][1].gather(morton_table.data(), in_block_xs1 | in_block_ys0 | in_block_zs1, mask);
-  indices[1][1][0].gather(morton_table.data(), in_block_xs0 | in_block_ys1 | in_block_zs1, mask);
-  indices[1][1][1].gather(morton_table.data(), in_block_xs1 | in_block_ys1 | in_block_zs1, mask);
-
-  for (uint32_t z = 0; z < 2; z++) {
-    for (uint32_t y = 0; y < 2; y++) {
-      for (uint32_t x = 0; x < 2; x++) {
-        indices[z][y][x] += block_start_index;
-      }
-    }
-  }
-
-#else
   uint32_v in_block_xs0_interleaved = interleave_4b_3d(in_block_xs + 0);
   uint32_v in_block_xs1_interleaved = interleave_4b_3d(in_block_xs + 1);
   uint32_v in_block_ys0_interleaved = interleave_4b_3d(in_block_ys + 0);
@@ -261,7 +214,6 @@ inline float_v sampler3DBlocked(const uint8_t *volume, uint32_t block_z_stride, 
   indices[1][0][1] = block_start_index + morton_combine_interleaved(in_block_xs1_interleaved, in_block_ys0_interleaved, in_block_zs1_interleaved);
   indices[1][1][0] = block_start_index + morton_combine_interleaved(in_block_xs0_interleaved, in_block_ys1_interleaved, in_block_zs1_interleaved);
   indices[1][1][1] = block_start_index + morton_combine_interleaved(in_block_xs1_interleaved, in_block_ys1_interleaved, in_block_zs1_interleaved);
-#endif
 
   int32_v buffers[2][2][2];
 
@@ -426,15 +378,15 @@ int main(int argc, char *argv[]) {
 
       ColorGradient1D<float> alphaGradient {};
 
+      /*
       alphaGradient.setColor(151.f,  0.0f);
       alphaGradient.setColor(152.f,  1.0f);
-      /*
-      alphaGradient.setColor(40.f,  0.0f);
-      alphaGradient.setColor(60.f,  0.1f);
-      alphaGradient.setColor(63.f,  0.05f);
-      alphaGradient.setColor(80.f,  0.00f);
-      alphaGradient.setColor(82.f,  1.00f);
       */
+      alphaGradient.setColor(40.f,  000.0f);
+      alphaGradient.setColor(60.f,  001.0f);
+      alphaGradient.setColor(63.f,  005.f);
+      alphaGradient.setColor(80.f,  000.0f);
+      alphaGradient.setColor(82.f,  100.0f);
 
       for (uint32_t i = 0; i < 256; i++) {
         glm::vec3 color = colorGradient.color(i);
@@ -454,7 +406,7 @@ int main(int argc, char *argv[]) {
   uint32_v pixel_offsets = uint32_v::IndexesFromZero() * 3;
 
   float time = 0.f;
-  while (!glfwWindowShouldClose(window) && time < 5.f) {
+  while (!glfwWindowShouldClose(window) && time < 10.f) {
 
     glm::mat4 model = glm::rotate(glm::mat4(1.0f), time, glm::vec3(0.0, 1.0, 0.0)) * glm::rotate(glm::mat4(1.0f), glm::radians(90.f), glm::vec3(1.0, 0.0, 0.0));
 
@@ -507,7 +459,7 @@ int main(int argc, char *argv[]) {
           float_v b = sampler1D(transferB.data(), values);
           float_v a = sampler1D(transferA.data(), values);
 
-          //a = float_v(1.f) - Vc::exp(-a * steps);
+          a = float_v(1.f) - Vc::exp(-a * stepsize);
 
           // Evaluate the current opacity
           dsts.r(mask) += r * a * dsts.a;
@@ -520,9 +472,9 @@ int main(int argc, char *argv[]) {
           tmins(mask) += stepsize;
         }
 
-        float_v rs = (dsts.r + dsts.a) * 255;
-        float_v gs = (dsts.g + dsts.a) * 255;
-        float_v bs = (dsts.b + dsts.a) * 255;
+        float_v rs = (dsts.r) * 255;
+        float_v gs = (dsts.g) * 255;
+        float_v bs = (dsts.b) * 255;
 
         uint8_t *rgb_start = raster.data() + j * rgb_y_stride + i * rgb_x_stride;
 
@@ -537,6 +489,6 @@ int main(int argc, char *argv[]) {
     glfwSwapBuffers(window);
     glfwPollEvents();
 
-    time += 0.5f;
+    time += 0.1f;
   }
 }
