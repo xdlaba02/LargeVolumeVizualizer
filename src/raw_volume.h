@@ -14,7 +14,7 @@ class RawVolume {
 public:
   RawVolume() = default;
 
-  RawVolume(const char *file_name, uint32_t width, uint32_t height, uint32_t depth, uint32_t bytes_per_voxel = 1):
+  RawVolume(const char *file_name, uint64_t width, uint64_t height, uint64_t depth, uint32_t bytes_per_voxel = 1):
       m_width(width),
       m_height(height),
       m_depth(depth),
@@ -45,7 +45,8 @@ public:
     }
   }
 
-  operator void *() const { return m_data; }
+  const void *data() const { return m_data; }
+  operator bool() const { return m_data; }
 
   uint32_t width()  const { return m_width; }
   uint32_t height() const { return m_height; }

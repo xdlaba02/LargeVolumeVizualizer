@@ -19,7 +19,11 @@ using Vc::float_m;
 constexpr uint32_t simdlen = float_v::size();
 
 using uint32_v = Vc::SimdArray<uint32_t, simdlen>;
-using int32_v = Vc::SimdArray<int32_t, simdlen>;
+using  int32_v = Vc::SimdArray<int32_t, simdlen>;
+
+// TODO preintegrated
+// TODO pyramid
+// TODO min max tree
 
 template <typename ColorType>
 class ColorGradient1D {
@@ -118,12 +122,7 @@ inline float_v sampler1D(const float *data, float_v values) {
   return accs[0] + (accs[1] - accs[0]) * (values - pix);
 };
 
-inline float_v sampler3D(const RawVolume &volume, float_v xs, float_v ys, float_v zs, float_m mask) {
-  const uint8_t *data = static_cast<uint8_t *>((void *)volume);
-  uint32_t width = volume.width();
-  uint32_t height = volume.height();
-  uint32_t depth = volume.depth();
-
+inline float_v sampler3D(const uint8_t *volume, uint32_t width, uint32_t height, uint32_t depth, uint64_t z_stride, uint64_t y_stride, uint64_t x_stride, float_v xs, float_v ys, float_v zs, float_m mask) {
   uint32_v pix_xs = xs;
   uint32_v pix_ys = ys;
   uint32_v pix_zs = zs;
@@ -138,28 +137,23 @@ inline float_v sampler3D(const RawVolume &volume, float_v xs, float_v ys, float_
 
   int32_v buffers[2][2][2];
 
-  uint32_v indices_z = (simd_cast<uint32_v>(pix_zs) * height + pix_ys) * width + pix_xs;
-  for (uint32_t z = 0; z < 2; z++) {
+  for (uint32_t k = 0; k < simdlen; k++) {
+    if (mask[k]) {
+      uint64_t base = pix_zs[k] * z_stride + pix_ys[k] * y_stride + pix_xs[k] * x_stride;
 
-    uint32_v indices_yz = indices_z;
-    for (uint32_t y = 0; y < 2; y++) {
+      uint64_t x_offset = incrementable_xs[k] * x_stride;
+      uint64_t y_offset = incrementable_ys[k] * y_stride;
+      uint64_t z_offset = incrementable_zs[k] * z_stride;
 
-      uint32_v indices_xyz = indices_yz;
-      for (uint32_t x = 0; x < 2; x++) {
-
-        for (uint32_t k = 0; k < simdlen; k++) {
-          if (mask[k]) {
-            buffers[z][y][x][k] = data[indices_xyz[k]];
-          }
-        }
-
-        indices_xyz(incrementable_xs) += 1;
-      }
-
-      indices_yz(incrementable_ys) += width;
+      buffers[0][0][0][k] = volume[base];
+      buffers[0][0][1][k] = volume[base + x_offset];
+      buffers[0][1][0][k] = volume[base + y_offset];
+      buffers[0][1][1][k] = volume[base + y_offset + x_offset];
+      buffers[1][0][0][k] = volume[base + z_offset];
+      buffers[1][0][1][k] = volume[base + z_offset + x_offset];
+      buffers[1][1][0][k] = volume[base + z_offset + y_offset];
+      buffers[1][1][1][k] = volume[base + z_offset + y_offset + x_offset];
     }
-
-    indices_z(incrementable_zs) += width * height;
   }
 
   float_v accs[2][2];
@@ -177,7 +171,7 @@ inline float_v sampler3D(const RawVolume &volume, float_v xs, float_v ys, float_
   return accs[0][0];
 };
 
-inline float_v sampler3DBlocked(const uint8_t *volume, uint32_t block_z_stride, uint32_t block_y_stride, uint32_t block_x_stride, float_v xs, float_v ys, float_v zs, float_m mask) {
+inline float_v sampler3DBlocked(const uint8_t *volume, uint64_t block_z_stride, uint64_t block_y_stride, uint64_t block_x_stride, float_v xs, float_v ys, float_v zs, float_m mask) {
   uint32_v pix_xs = xs;
   uint32_v pix_ys = ys;
   uint32_v pix_zs = zs;
@@ -195,10 +189,6 @@ inline float_v sampler3DBlocked(const uint8_t *volume, uint32_t block_z_stride, 
   uint32_v in_block_ys = pix_ys - ((block_ys << 4) - block_ys);
   uint32_v in_block_zs = pix_zs - ((block_zs << 4) - block_zs);
 
-  uint32_v block_start_index = block_zs * block_z_stride + block_ys * block_y_stride + block_xs * block_x_stride;
-
-  uint32_v indices[2][2][2];
-
   uint32_v in_block_xs0_interleaved = interleave_4b_3d(in_block_xs + 0);
   uint32_v in_block_xs1_interleaved = interleave_4b_3d(in_block_xs + 1);
   uint32_v in_block_ys0_interleaved = interleave_4b_3d(in_block_ys + 0);
@@ -206,27 +196,31 @@ inline float_v sampler3DBlocked(const uint8_t *volume, uint32_t block_z_stride, 
   uint32_v in_block_zs0_interleaved = interleave_4b_3d(in_block_zs + 0);
   uint32_v in_block_zs1_interleaved = interleave_4b_3d(in_block_zs + 1);
 
-  indices[0][0][0] = block_start_index + morton_combine_interleaved(in_block_xs0_interleaved, in_block_ys0_interleaved, in_block_zs0_interleaved);
-  indices[0][0][1] = block_start_index + morton_combine_interleaved(in_block_xs1_interleaved, in_block_ys0_interleaved, in_block_zs0_interleaved);
-  indices[0][1][0] = block_start_index + morton_combine_interleaved(in_block_xs0_interleaved, in_block_ys1_interleaved, in_block_zs0_interleaved);
-  indices[0][1][1] = block_start_index + morton_combine_interleaved(in_block_xs1_interleaved, in_block_ys1_interleaved, in_block_zs0_interleaved);
-  indices[1][0][0] = block_start_index + morton_combine_interleaved(in_block_xs0_interleaved, in_block_ys0_interleaved, in_block_zs1_interleaved);
-  indices[1][0][1] = block_start_index + morton_combine_interleaved(in_block_xs1_interleaved, in_block_ys0_interleaved, in_block_zs1_interleaved);
-  indices[1][1][0] = block_start_index + morton_combine_interleaved(in_block_xs0_interleaved, in_block_ys1_interleaved, in_block_zs1_interleaved);
-  indices[1][1][1] = block_start_index + morton_combine_interleaved(in_block_xs1_interleaved, in_block_ys1_interleaved, in_block_zs1_interleaved);
+  uint32_v offsets[2][2][2];
+
+  offsets[0][0][0] = morton_combine_interleaved(in_block_xs0_interleaved, in_block_ys0_interleaved, in_block_zs0_interleaved);
+  offsets[0][0][1] = morton_combine_interleaved(in_block_xs1_interleaved, in_block_ys0_interleaved, in_block_zs0_interleaved);
+  offsets[0][1][0] = morton_combine_interleaved(in_block_xs0_interleaved, in_block_ys1_interleaved, in_block_zs0_interleaved);
+  offsets[0][1][1] = morton_combine_interleaved(in_block_xs1_interleaved, in_block_ys1_interleaved, in_block_zs0_interleaved);
+  offsets[1][0][0] = morton_combine_interleaved(in_block_xs0_interleaved, in_block_ys0_interleaved, in_block_zs1_interleaved);
+  offsets[1][0][1] = morton_combine_interleaved(in_block_xs1_interleaved, in_block_ys0_interleaved, in_block_zs1_interleaved);
+  offsets[1][1][0] = morton_combine_interleaved(in_block_xs0_interleaved, in_block_ys1_interleaved, in_block_zs1_interleaved);
+  offsets[1][1][1] = morton_combine_interleaved(in_block_xs1_interleaved, in_block_ys1_interleaved, in_block_zs1_interleaved);
 
   int32_v buffers[2][2][2];
 
   for (uint32_t k = 0; k < simdlen; k++) {
     if (mask[k]) {
-      buffers[0][0][0][k] = volume[indices[0][0][0][k]];
-      buffers[0][0][1][k] = volume[indices[0][0][1][k]];
-      buffers[0][1][0][k] = volume[indices[0][1][0][k]];
-      buffers[0][1][1][k] = volume[indices[0][1][1][k]];
-      buffers[1][0][0][k] = volume[indices[1][0][0][k]];
-      buffers[1][0][1][k] = volume[indices[1][0][1][k]];
-      buffers[1][1][0][k] = volume[indices[1][1][0][k]];
-      buffers[1][1][1][k] = volume[indices[1][1][1][k]];
+      uint64_t block_start_index = block_zs[k] * block_z_stride + block_ys[k] * block_y_stride + block_xs[k] * block_x_stride;
+
+      buffers[0][0][0][k] = volume[block_start_index + offsets[0][0][0][k]];
+      buffers[0][0][1][k] = volume[block_start_index + offsets[0][0][1][k]];
+      buffers[0][1][0][k] = volume[block_start_index + offsets[0][1][0][k]];
+      buffers[0][1][1][k] = volume[block_start_index + offsets[0][1][1][k]];
+      buffers[1][0][0][k] = volume[block_start_index + offsets[1][0][0][k]];
+      buffers[1][0][1][k] = volume[block_start_index + offsets[1][0][1][k]];
+      buffers[1][1][0][k] = volume[block_start_index + offsets[1][1][0][k]];
+      buffers[1][1][1][k] = volume[block_start_index + offsets[1][1][1][k]];
     }
   }
 
@@ -338,7 +332,7 @@ int main(int argc, char *argv[]) {
                   uint32_t in_block_index = morton_combine_interleaved(x_interleaved, y_interleaved, z_interleaved);
                   uint64_t original_index = original_z * z_stride + original_y * y_stride + original_x * x_stride;
 
-                  block[in_block_index] = ((const uint8_t *)(const void *)volume)[original_index];
+                  block[in_block_index] = ((const uint8_t *)volume.data())[original_index];
                 }
               }
             }
@@ -400,8 +394,8 @@ int main(int argc, char *argv[]) {
 
   std::vector<uint8_t> raster(window_width * window_height * 3);
 
-  size_t rgb_x_stride = 3;
-  size_t rgb_y_stride = window_width * rgb_x_stride;
+  uint64_t rgb_x_stride = 3;
+  uint64_t rgb_y_stride = window_width * rgb_x_stride;
 
   uint32_v pixel_offsets = uint32_v::IndexesFromZero() * 3;
 
@@ -451,8 +445,8 @@ int main(int argc, char *argv[]) {
 
           glm::vec<3, float_v> vs = glm::vec<3, float_v>(origin) + ray_directions * (tmins + steps / 2.f) + float_v(0.5f);
 
-          float_v values = sampler3DBlocked(blocked_volume, block_z_stride, block_y_stride, block_x_stride, vs.x * (width - 1), vs.y * (height - 1), vs.z * (depth - 1), mask);
-          //float_v values = sampler3D(volume, vs.x * (width - 1), vs.y * (height - 1), vs.z * (depth - 1), mask);
+          //float_v values = sampler3DBlocked(blocked_volume, block_z_stride, block_y_stride, block_x_stride, vs.x * (width - 1), vs.y * (height - 1), vs.z * (depth - 1), mask);
+          float_v values = sampler3D((const uint8_t *)volume.data(), width, height, depth, z_stride, y_stride, x_stride, vs.x * (width - 1), vs.y * (height - 1), vs.z * (depth - 1), mask);
 
           float_v r = sampler1D(transferR.data(), values);
           float_v g = sampler1D(transferG.data(), values);
