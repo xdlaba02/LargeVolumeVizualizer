@@ -9,6 +9,7 @@
 #include <Vc/Vc>
 
 #include <iostream>
+#include <fstream>
 #include <sstream>
 #include <vector>
 #include <cmath>
@@ -90,6 +91,20 @@ inline constexpr T morton_combine_interleaved(T x, T y, T z) {
 }
 
 template <typename T>
+inline constexpr T deinterleave_4b_3d(T v) {
+  v &= 0x249;
+  v = (v | (v >> 2)) & 0x0C3;
+  return (v | (v >> 4)) & 0x00F;
+}
+
+template <typename T>
+inline constexpr void from_morton_index_4b_3d(T v, T &x, T &y, T &z) {
+  x = deinterleave_4b_3d(v >> 0);
+  y = deinterleave_4b_3d(v >> 1);
+  z = deinterleave_4b_3d(v >> 2);
+}
+
+template <typename T>
 inline constexpr T morton_index_4b_3d(T x, T y, T z) {
   return morton_combine_interleaved(interleave_4b_3d(x), interleave_4b_3d(y), interleave_4b_3d(z));
 }
@@ -122,7 +137,39 @@ inline float_v sampler1D(const float *data, float_v values) {
   return accs[0] + (accs[1] - accs[0]) * (values - pix);
 };
 
-inline float_v sampler3D(const uint8_t *volume, uint32_t width, uint32_t height, uint32_t depth, uint64_t z_stride, uint64_t y_stride, uint64_t x_stride, float_v xs, float_v ys, float_v zs, float_m mask) {
+template <size_t W, size_t H>
+inline float_v sampler2D(const float *data, float_v xs, float_v ys, float_m mask) {
+  uint32_v pix_xs = xs;
+  uint32_v pix_ys = ys;
+
+  float_v frac_xs = xs - pix_xs;
+  float_v frac_ys = ys - pix_ys;
+
+  float_v accs[2][2];
+
+  for (uint32_t k = 0; k < simdlen; k++) {
+    if (mask[k]) {
+        uint64_t base = pix_ys[k] * W + pix_xs[k];
+
+        accs[0][0][k] = data[base];
+        accs[0][1][k] = data[base + 1];
+        accs[1][0][k] = data[base + W];
+        accs[1][1][k] = data[base + W + 1];
+    }
+  }
+
+  accs[0][0] += (accs[0][1] - accs[0][0]) * frac_xs;
+  accs[1][0] += (accs[1][1] - accs[1][0]) * frac_xs;
+
+  return accs[0][0] + (accs[1][0] - accs[0][0]) * frac_ys;
+};
+
+template <typename T>
+inline float_v rawVolumeSampler(const RawVolume<T> &volume, float_v xs, float_v ys, float_v zs, float_m mask) {
+  xs *= volume.width() - 1;
+  ys *= volume.height() - 1;
+  zs *= volume.depth() - 1;
+
   uint32_v pix_xs = xs;
   uint32_v pix_ys = ys;
   uint32_v pix_zs = zs;
@@ -131,19 +178,19 @@ inline float_v sampler3D(const uint8_t *volume, uint32_t width, uint32_t height,
   float_v frac_ys = ys - pix_ys;
   float_v frac_zs = zs - pix_zs;
 
-  float_m incrementable_xs = pix_xs < (width - 1);
-  float_m incrementable_ys = pix_ys < (height - 1);
-  float_m incrementable_zs = pix_zs < (depth - 1);
+  float_m incrementable_xs = pix_xs < (volume.width() - 1);
+  float_m incrementable_ys = pix_ys < (volume.height() - 1);
+  float_m incrementable_zs = pix_zs < (volume.depth() - 1);
 
   int32_v buffers[2][2][2];
 
   for (uint32_t k = 0; k < simdlen; k++) {
     if (mask[k]) {
-      uint64_t base = pix_zs[k] * z_stride + pix_ys[k] * y_stride + pix_xs[k] * x_stride;
+      uint64_t base = pix_zs[k] * volume.zStride() + pix_ys[k] * volume.yStride() + pix_xs[k] * volume.xStride();
 
-      uint64_t x_offset = incrementable_xs[k] * x_stride;
-      uint64_t y_offset = incrementable_ys[k] * y_stride;
-      uint64_t z_offset = incrementable_zs[k] * z_stride;
+      uint64_t x_offset = incrementable_xs[k] * volume.xStride();
+      uint64_t y_offset = incrementable_ys[k] * volume.yStride();
+      uint64_t z_offset = incrementable_zs[k] * volume.zStride();
 
       buffers[0][0][0][k] = volume[base];
       buffers[0][0][1][k] = volume[base + x_offset];
@@ -171,7 +218,7 @@ inline float_v sampler3D(const uint8_t *volume, uint32_t width, uint32_t height,
   return accs[0][0];
 };
 
-inline float_v sampler3DBlocked(const uint8_t *volume, uint64_t block_z_stride, uint64_t block_y_stride, uint64_t block_x_stride, float_v xs, float_v ys, float_v zs, float_m mask) {
+inline float_v blockedVolumeSampler(const uint8_t *volume, uint64_t block_z_stride, uint64_t block_y_stride, uint64_t block_x_stride, float_v xs, float_v ys, float_v zs, float_m mask) {
   uint32_v pix_xs = xs;
   uint32_v pix_ys = ys;
   uint32_v pix_zs = zs;
@@ -269,16 +316,11 @@ int main(int argc, char *argv[]) {
     dstream >> depth;
   }
 
-
-  RawVolume volume(argv[1], width, height, depth);
+  RawVolume<uint8_t> volume(argv[1], width, height, depth);
   if (!volume) {
     std::cerr << "couldn't open volume\n";
     return 1;
   }
-
-  uint32_t x_stride = 1;
-  uint32_t y_stride = width * x_stride;
-  uint32_t z_stride = height * y_stride;
 
   uint32_t width_in_blocks  = (width  + 14) / 15;
   uint32_t height_in_blocks = (height + 14) / 15;
@@ -292,58 +334,34 @@ int main(int argc, char *argv[]) {
 
   std::string blocked_file_name = std::string(argv[1]) + ".blocked";
 
-  uint8_t *blocked_volume {};
-  {
-    if (access(blocked_file_name.c_str(), F_OK)) {
-      int fd = open(blocked_file_name.c_str(), O_RDWR | O_CREAT, 00777);
-      lseek(fd, blocked_size - 1, SEEK_SET);
-      write(fd, "", 1);
+  if (access(blocked_file_name.c_str(), F_OK)) {
+    std::ofstream blocked_volume(blocked_file_name, std::ios_base::binary);
+    if (!blocked_volume) {
+      std::cerr << "failed creating file " << blocked_file_name << '\n';
+      return 1;
+    }
 
-      blocked_volume = (uint8_t *)mmap(nullptr, blocked_size, PROT_WRITE, MAP_SHARED, fd, 0);
+    for (uint32_t block_z = 0; block_z < depth_in_blocks; block_z++) {
+      for (uint32_t block_y = 0; block_y < height_in_blocks; block_y++) {
+        for (uint32_t block_x = 0; block_x < width_in_blocks; block_x++) {
+          for (uint32_t i = 0; i < block_x_stride; i++) {
+            uint32_t x, y, z;
+            from_morton_index_4b_3d(i, x, y, z);
 
-      close(fd);
+            uint32_t original_x = std::min(block_x * 15 + x, width - 1);
+            uint32_t original_y = std::min(block_y * 15 + y, height - 1);
+            uint32_t original_z = std::min(block_z * 15 + z, depth - 1);
 
-      if (blocked_volume == MAP_FAILED) {
-        std::cerr << "mmap: " << std::strerror(errno) << '\n';
-        return 1;
-      }
+            uint8_t value = volume(original_x, original_y, original_z);
 
-      for (uint32_t block_z = 0; block_z < depth_in_blocks; block_z++) {
-        for (uint32_t block_y = 0; block_y < height_in_blocks; block_y++) {
-          for (uint32_t block_x = 0; block_x < width_in_blocks; block_x++) {
-
-            uint8_t *block = &blocked_volume[block_z * block_z_stride + block_y * block_y_stride + block_x * block_x_stride];
-
-            for (uint32_t z = 0; z < 16; z++) {
-
-              uint32_t z_interleaved = interleave_4b_3d(z);
-              uint64_t original_z = std::min(block_z * 15 + z, depth - 1);
-
-              for (uint32_t y = 0; y < 16; y++) {
-
-                uint32_t y_interleaved = interleave_4b_3d(y);
-                uint64_t original_y = std::min(block_y * 15 + y, height - 1);
-
-                for (uint32_t x = 0; x < 16; x++) {
-
-                  uint32_t x_interleaved = interleave_4b_3d(x);
-                  uint64_t original_x = std::min(block_x * 15 + x, width - 1);
-
-                  uint32_t in_block_index = morton_combine_interleaved(x_interleaved, y_interleaved, z_interleaved);
-                  uint64_t original_index = original_z * z_stride + original_y * y_stride + original_x * x_stride;
-
-                  block[in_block_index] = ((const uint8_t *)volume.data())[original_index];
-                }
-              }
-            }
-
+            blocked_volume.write(reinterpret_cast<const char *>(&value), sizeof(value));
           }
         }
       }
-
-      munmap(blocked_volume, blocked_size);
     }
   }
+
+  uint8_t *blocked_volume {};
 
   {
     int fd = open(blocked_file_name.c_str(), O_RDONLY);
@@ -358,11 +376,10 @@ int main(int argc, char *argv[]) {
     }
   }
 
-
-  std::array<float, 257> transferR {};
-  std::array<float, 257> transferG {};
-  std::array<float, 257> transferB {};
-  std::array<float, 257> transferA {};
+  std::array<float, 257 * 257> preintegratedTransferR {};
+  std::array<float, 257 * 257> preintegratedTransferG {};
+  std::array<float, 257 * 257> preintegratedTransferB {};
+  std::array<float, 257 * 257> preintegratedTransferA {};
 
   {
       ColorGradient1D<glm::vec3> colorGradient {};
@@ -382,13 +399,20 @@ int main(int argc, char *argv[]) {
       alphaGradient.setColor(80.f,  000.0f);
       alphaGradient.setColor(82.f,  100.0f);
 
-      for (uint32_t i = 0; i < 256; i++) {
-        glm::vec3 color = colorGradient.color(i);
-        float alpha = alphaGradient.color(i);
-        transferR[i] = color.r;
-        transferG[i] = color.g;
-        transferB[i] = color.b;
-        transferA[i] = alpha;
+      for (uint32_t x = 0; x < 257; x++) {
+        glm::vec3 color(0.f, 0.f, 0.f);
+        float alpha = 0.f;
+
+        for (uint32_t y = x; y < 257; y++) {
+          color += colorGradient.color(y);
+          alpha += alphaGradient.color(y);
+
+          preintegratedTransferR[y * 257 + x] = preintegratedTransferR[x * 257 + y] = color.r / ((y + 1) - x);
+          preintegratedTransferG[y * 257 + x] = preintegratedTransferG[x * 257 + y] = color.g / ((y + 1) - x);
+          preintegratedTransferB[y * 257 + x] = preintegratedTransferB[x * 257 + y] = color.b / ((y + 1) - x);
+          preintegratedTransferA[y * 257 + x] = preintegratedTransferA[x * 257 + y] = alpha   / ((y + 1) - x);
+        }
+
       }
   }
 
@@ -400,9 +424,9 @@ int main(int argc, char *argv[]) {
   uint32_v pixel_offsets = uint32_v::IndexesFromZero() * 3;
 
   float time = 0.f;
-  while (!glfwWindowShouldClose(window) && time < 10.f) {
+  while (!glfwWindowShouldClose(window)) {
 
-    glm::mat4 model = glm::rotate(glm::mat4(1.0f), time, glm::vec3(0.0, 1.0, 0.0)) * glm::rotate(glm::mat4(1.0f), glm::radians(90.f), glm::vec3(1.0, 0.0, 0.0));
+    glm::mat4 model = glm::rotate(glm::mat4(1.0f), -time, glm::vec3(0.0, 1.0, 0.0)) * glm::rotate(glm::mat4(1.0f), glm::radians(90.f), glm::vec3(1.0, 0.0, 0.0));
 
     glm::vec3 origin = glm::vec3(1, 0, 0) * 2.f;
     glm::mat4 view = glm::lookAt(origin, { 0, 0, 0 }, {0, 1, 0 }) * model;
@@ -438,43 +462,58 @@ int main(int argc, char *argv[]) {
 
         glm::vec<4, float_v> dsts(0.f, 0.f, 0.f, 1.f);
 
-        constexpr float stepsize = 0.01f;
+        constexpr float stepsize = 0.002f;
 
-        for (float_m mask = tmins <= tmaxs; !mask.isEmpty(); mask &= tmins <= tmaxs) {
-          float_v steps = Vc::min(stepsize, tmaxs - tmins);
+        float_v prev_values {};
 
-          glm::vec<3, float_v> vs = glm::vec<3, float_v>(origin) + ray_directions * (tmins + steps / 2.f) + float_v(0.5f);
-
-          //float_v values = sampler3DBlocked(blocked_volume, block_z_stride, block_y_stride, block_x_stride, vs.x * (width - 1), vs.y * (height - 1), vs.z * (depth - 1), mask);
-          float_v values = sampler3D((const uint8_t *)volume.data(), width, height, depth, z_stride, y_stride, x_stride, vs.x * (width - 1), vs.y * (height - 1), vs.z * (depth - 1), mask);
-
-          float_v r = sampler1D(transferR.data(), values);
-          float_v g = sampler1D(transferG.data(), values);
-          float_v b = sampler1D(transferB.data(), values);
-          float_v a = sampler1D(transferA.data(), values);
-
-          a = float_v(1.f) - Vc::exp(-a * stepsize);
-
-          // Evaluate the current opacity
-          dsts.r(mask) += r * a * dsts.a;
-          dsts.g(mask) += g * a * dsts.a;
-          dsts.b(mask) += b * a * dsts.a;
-          dsts.a(mask) *= 1 - a;
-
-          mask &= dsts.a > 0.01f;
-
-          tmins(mask) += stepsize;
+        {
+          glm::vec<3, float_v> vs = glm::vec<3, float_v>(origin) + ray_directions * tmins + float_v(0.5f);
+          prev_values = blockedVolumeSampler(blocked_volume, block_z_stride, block_y_stride, block_x_stride, vs.x * (width - 1), vs.y * (height - 1), vs.z * (depth - 1), tmins <= tmaxs);
+          tmins += stepsize;
         }
 
-        float_v rs = (dsts.r) * 255;
-        float_v gs = (dsts.g) * 255;
-        float_v bs = (dsts.b) * 255;
+        for (float_m mask = tmins <= tmaxs; !mask.isEmpty(); mask &= tmins <= tmaxs) {
+          glm::vec<3, float_v> vs = glm::vec<3, float_v>(origin) + ray_directions * tmins + float_v(0.5f);
+
+          //float_v values = blockedVolumeSampler(blocked_volume, block_z_stride, block_y_stride, block_x_stride, vs.x * (width - 1), vs.y * (height - 1), vs.z * (depth - 1), mask);
+          float_v values = rawVolumeSampler(volume, vs.x, vs.y, vs.z, mask);
+
+          float_v a = sampler2D<257, 257>(preintegratedTransferA.data(), values, prev_values, mask);
+
+          float_m alpha_mask = a > 0.f;
+
+          if (!alpha_mask.isEmpty()) {
+            float_v r = sampler2D<257, 257>(preintegratedTransferR.data(), values, prev_values, mask & alpha_mask);
+            float_v g = sampler2D<257, 257>(preintegratedTransferG.data(), values, prev_values, mask & alpha_mask);
+            float_v b = sampler2D<257, 257>(preintegratedTransferB.data(), values, prev_values, mask & alpha_mask);
+
+            a = float_v(1.f) - Vc::exp(-a * Vc::min(stepsize, tmaxs - tmins));
+
+            float_v coef = a * dsts.a;
+
+            // Evaluate the current opacity
+            dsts.r(mask) += r * coef;
+            dsts.g(mask) += g * coef;
+            dsts.b(mask) += b * coef;
+            dsts.a(mask) *= 1 - a;
+
+            mask &= dsts.a > 0.01f;
+          }
+
+          prev_values = values;
+
+          tmins += stepsize;
+        }
+
+        dsts.r *= 255;
+        dsts.g *= 255;
+        dsts.b *= 255;
 
         uint8_t *rgb_start = raster.data() + j * rgb_y_stride + i * rgb_x_stride;
 
-        rs.scatter(rgb_start + 0, pixel_offsets);
-        gs.scatter(rgb_start + 1, pixel_offsets);
-        bs.scatter(rgb_start + 2, pixel_offsets);
+        dsts.r.scatter(rgb_start + 0, pixel_offsets);
+        dsts.g.scatter(rgb_start + 1, pixel_offsets);
+        dsts.b.scatter(rgb_start + 2, pixel_offsets);
       }
     }
 
