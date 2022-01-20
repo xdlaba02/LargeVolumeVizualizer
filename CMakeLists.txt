@@ -19,7 +19,8 @@ file(GLOB SRC_FILES CONFIGURE_DEPENDS src/*.cc)
 
 find_package(OpenGL REQUIRED)
 
-add_executable(${PROJECT_NAME} ${SRC_FILES})
+add_executable(${PROJECT_NAME} src/main.cc)
+add_executable(process_volume src/process_volume.cc)
 target_link_libraries(${PROJECT_NAME} glm glfw OpenGL::GL Vc)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)

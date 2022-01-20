@@ -1,5 +1,7 @@
 
 #include "raw_volume.h"
+#include "morton.h"
+#include "blocked_volume.h"
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -77,36 +79,6 @@ inline void intersect_aabb_rays_single_origin(const glm::vec3& origin, glm::vec<
     tmins(t0 > tmins) = t0;
     tmaxs(t1 < tmaxs) = t1;
   }
-}
-
-template <typename T>
-inline constexpr T interleave_4b_3d(T v) {
-  v = (v | (v << 4)) & 0x0C3;
-  return (v | (v << 2)) & 0x249;
-}
-
-template <typename T>
-inline constexpr T morton_combine_interleaved(T x, T y, T z) {
-  return x | (y << 1) | (z << 2);
-}
-
-template <typename T>
-inline constexpr T deinterleave_4b_3d(T v) {
-  v &= 0x249;
-  v = (v | (v >> 2)) & 0x0C3;
-  return (v | (v >> 4)) & 0x00F;
-}
-
-template <typename T>
-inline constexpr void from_morton_index_4b_3d(T v, T &x, T &y, T &z) {
-  x = deinterleave_4b_3d(v >> 0);
-  y = deinterleave_4b_3d(v >> 1);
-  z = deinterleave_4b_3d(v >> 2);
-}
-
-template <typename T>
-inline constexpr T morton_index_4b_3d(T x, T y, T z) {
-  return morton_combine_interleaved(interleave_4b_3d(x), interleave_4b_3d(y), interleave_4b_3d(z));
 }
 
 #if 1
@@ -218,7 +190,11 @@ inline float_v rawVolumeSampler(const RawVolume<T> &volume, float_v xs, float_v 
   return accs[0][0];
 };
 
-inline float_v blockedVolumeSampler(const uint8_t *volume, uint64_t block_z_stride, uint64_t block_y_stride, uint64_t block_x_stride, float_v xs, float_v ys, float_v zs, float_m mask) {
+inline float_v blockedVolumeSampler(const BlockedVolume<uint8_t> &volume, float_v xs, float_v ys, float_v zs, float_m mask) {
+  xs *= volume.width() - 1;
+  ys *= volume.height() - 1;
+  zs *= volume.depth() - 1;
+
   uint32_v pix_xs = xs;
   uint32_v pix_ys = ys;
   uint32_v pix_zs = zs;
@@ -236,38 +212,55 @@ inline float_v blockedVolumeSampler(const uint8_t *volume, uint64_t block_z_stri
   uint32_v in_block_ys = pix_ys - ((block_ys << 4) - block_ys);
   uint32_v in_block_zs = pix_zs - ((block_zs << 4) - block_zs);
 
-  uint32_v in_block_xs0_interleaved = interleave_4b_3d(in_block_xs + 0);
-  uint32_v in_block_xs1_interleaved = interleave_4b_3d(in_block_xs + 1);
-  uint32_v in_block_ys0_interleaved = interleave_4b_3d(in_block_ys + 0);
-  uint32_v in_block_ys1_interleaved = interleave_4b_3d(in_block_ys + 1);
-  uint32_v in_block_zs0_interleaved = interleave_4b_3d(in_block_zs + 0);
-  uint32_v in_block_zs1_interleaved = interleave_4b_3d(in_block_zs + 1);
+  uint32_v in_block_xs0_interleaved = morton::interleave_4b_3d(in_block_xs + 0);
+  uint32_v in_block_xs1_interleaved = morton::interleave_4b_3d(in_block_xs + 1);
+  uint32_v in_block_ys0_interleaved = morton::interleave_4b_3d(in_block_ys + 0);
+  uint32_v in_block_ys1_interleaved = morton::interleave_4b_3d(in_block_ys + 1);
+  uint32_v in_block_zs0_interleaved = morton::interleave_4b_3d(in_block_zs + 0);
+  uint32_v in_block_zs1_interleaved = morton::interleave_4b_3d(in_block_zs + 1);
 
   uint32_v offsets[2][2][2];
 
-  offsets[0][0][0] = morton_combine_interleaved(in_block_xs0_interleaved, in_block_ys0_interleaved, in_block_zs0_interleaved);
-  offsets[0][0][1] = morton_combine_interleaved(in_block_xs1_interleaved, in_block_ys0_interleaved, in_block_zs0_interleaved);
-  offsets[0][1][0] = morton_combine_interleaved(in_block_xs0_interleaved, in_block_ys1_interleaved, in_block_zs0_interleaved);
-  offsets[0][1][1] = morton_combine_interleaved(in_block_xs1_interleaved, in_block_ys1_interleaved, in_block_zs0_interleaved);
-  offsets[1][0][0] = morton_combine_interleaved(in_block_xs0_interleaved, in_block_ys0_interleaved, in_block_zs1_interleaved);
-  offsets[1][0][1] = morton_combine_interleaved(in_block_xs1_interleaved, in_block_ys0_interleaved, in_block_zs1_interleaved);
-  offsets[1][1][0] = morton_combine_interleaved(in_block_xs0_interleaved, in_block_ys1_interleaved, in_block_zs1_interleaved);
-  offsets[1][1][1] = morton_combine_interleaved(in_block_xs1_interleaved, in_block_ys1_interleaved, in_block_zs1_interleaved);
+  offsets[0][0][0] = morton::morton_combine_interleaved(in_block_xs0_interleaved, in_block_ys0_interleaved, in_block_zs0_interleaved);
+  offsets[0][0][1] = morton::morton_combine_interleaved(in_block_xs1_interleaved, in_block_ys0_interleaved, in_block_zs0_interleaved);
+  offsets[0][1][0] = morton::morton_combine_interleaved(in_block_xs0_interleaved, in_block_ys1_interleaved, in_block_zs0_interleaved);
+  offsets[0][1][1] = morton::morton_combine_interleaved(in_block_xs1_interleaved, in_block_ys1_interleaved, in_block_zs0_interleaved);
+  offsets[1][0][0] = morton::morton_combine_interleaved(in_block_xs0_interleaved, in_block_ys0_interleaved, in_block_zs1_interleaved);
+  offsets[1][0][1] = morton::morton_combine_interleaved(in_block_xs1_interleaved, in_block_ys0_interleaved, in_block_zs1_interleaved);
+  offsets[1][1][0] = morton::morton_combine_interleaved(in_block_xs0_interleaved, in_block_ys1_interleaved, in_block_zs1_interleaved);
+  offsets[1][1][1] = morton::morton_combine_interleaved(in_block_xs1_interleaved, in_block_ys1_interleaved, in_block_zs1_interleaved);
 
   int32_v buffers[2][2][2];
 
   for (uint32_t k = 0; k < simdlen; k++) {
     if (mask[k]) {
-      uint64_t block_start_index = block_zs[k] * block_z_stride + block_ys[k] * block_y_stride + block_xs[k] * block_x_stride;
+      uint64_t block_index = block_zs[k] * volume.stride_in_blocks() + block_ys[k] * volume.width_in_blocks() + block_xs[k];
 
-      buffers[0][0][0][k] = volume[block_start_index + offsets[0][0][0][k]];
-      buffers[0][0][1][k] = volume[block_start_index + offsets[0][0][1][k]];
-      buffers[0][1][0][k] = volume[block_start_index + offsets[0][1][0][k]];
-      buffers[0][1][1][k] = volume[block_start_index + offsets[0][1][1][k]];
-      buffers[1][0][0][k] = volume[block_start_index + offsets[1][0][0][k]];
-      buffers[1][0][1][k] = volume[block_start_index + offsets[1][0][1][k]];
-      buffers[1][1][0][k] = volume[block_start_index + offsets[1][1][0][k]];
-      buffers[1][1][1][k] = volume[block_start_index + offsets[1][1][1][k]];
+      uint8_t min = volume.min(block_index);
+      uint8_t max = volume.max(block_index);
+
+      if (min == max) {
+        buffers[0][0][0][k] = min;
+        buffers[0][0][1][k] = min;
+        buffers[0][1][0][k] = min;
+        buffers[0][1][1][k] = min;
+        buffers[1][0][0][k] = min;
+        buffers[1][0][1][k] = min;
+        buffers[1][1][0][k] = min;
+        buffers[1][1][1][k] = min;
+      }
+      else {
+        const Block<uint8_t> &block = volume.block(volume.offset(block_index));
+
+        buffers[0][0][0][k] = block[offsets[0][0][0][k]];
+        buffers[0][0][1][k] = block[offsets[0][0][1][k]];
+        buffers[0][1][0][k] = block[offsets[0][1][0][k]];
+        buffers[0][1][1][k] = block[offsets[0][1][1][k]];
+        buffers[1][0][0][k] = block[offsets[1][0][0][k]];
+        buffers[1][0][1][k] = block[offsets[1][0][1][k]];
+        buffers[1][1][0][k] = block[offsets[1][1][0][k]];
+        buffers[1][1][1][k] = block[offsets[1][1][1][k]];
+      }
     }
   }
 
@@ -285,6 +278,9 @@ inline float_v blockedVolumeSampler(const uint8_t *volume, uint64_t block_z_stri
 
   return accs[0][0];
 };
+
+template <typename T>
+using Block = T[4096];
 
 int main(int argc, char *argv[]) {
   if (!glfwInit()) {
@@ -308,72 +304,19 @@ int main(int argc, char *argv[]) {
   uint32_t depth;
 
   {
-    std::stringstream wstream(argv[2]);
-    std::stringstream hstream(argv[3]);
-    std::stringstream dstream(argv[4]);
+    std::stringstream wstream(argv[3]);
+    std::stringstream hstream(argv[4]);
+    std::stringstream dstream(argv[5]);
     wstream >> width;
     hstream >> height;
     dstream >> depth;
   }
 
-  RawVolume<uint8_t> volume(argv[1], width, height, depth);
-  if (!volume) {
-    std::cerr << "couldn't open volume\n";
+  BlockedVolume<uint8_t> blocked_volume(argv[1], argv[2], width, height, depth);
+
+  if (!blocked_volume) {
+    std::cerr << "blocked_volume failed\n";
     return 1;
-  }
-
-  uint32_t width_in_blocks  = (width  + 14) / 15;
-  uint32_t height_in_blocks = (height + 14) / 15;
-  uint32_t depth_in_blocks  = (depth  + 14) / 15;
-
-  uint64_t block_x_stride = 4096;
-  uint64_t block_y_stride = width_in_blocks * block_x_stride;
-  uint64_t block_z_stride = height_in_blocks * block_y_stride;
-
-  uint64_t blocked_size = depth_in_blocks * block_z_stride;
-
-  std::string blocked_file_name = std::string(argv[1]) + ".blocked";
-
-  if (access(blocked_file_name.c_str(), F_OK)) {
-    std::ofstream blocked_volume(blocked_file_name, std::ios_base::binary);
-    if (!blocked_volume) {
-      std::cerr << "failed creating file " << blocked_file_name << '\n';
-      return 1;
-    }
-
-    for (uint32_t block_z = 0; block_z < depth_in_blocks; block_z++) {
-      for (uint32_t block_y = 0; block_y < height_in_blocks; block_y++) {
-        for (uint32_t block_x = 0; block_x < width_in_blocks; block_x++) {
-          for (uint32_t i = 0; i < block_x_stride; i++) {
-            uint32_t x, y, z;
-            from_morton_index_4b_3d(i, x, y, z);
-
-            uint32_t original_x = std::min(block_x * 15 + x, width - 1);
-            uint32_t original_y = std::min(block_y * 15 + y, height - 1);
-            uint32_t original_z = std::min(block_z * 15 + z, depth - 1);
-
-            uint8_t value = volume(original_x, original_y, original_z);
-
-            blocked_volume.write(reinterpret_cast<const char *>(&value), sizeof(value));
-          }
-        }
-      }
-    }
-  }
-
-  uint8_t *blocked_volume {};
-
-  {
-    int fd = open(blocked_file_name.c_str(), O_RDONLY);
-
-    blocked_volume = (uint8_t *)mmap(nullptr, blocked_size, PROT_READ, MAP_SHARED, fd, 0);
-
-    close(fd);
-
-    if (blocked_volume == MAP_FAILED) {
-      std::cerr << "mmap: " << std::strerror(errno) << '\n';
-      return 1;
-    }
   }
 
   std::array<float, 257 * 257> preintegratedTransferR {};
@@ -412,7 +355,6 @@ int main(int argc, char *argv[]) {
           preintegratedTransferB[y * 257 + x] = preintegratedTransferB[x * 257 + y] = color.b / ((y + 1) - x);
           preintegratedTransferA[y * 257 + x] = preintegratedTransferA[x * 257 + y] = alpha   / ((y + 1) - x);
         }
-
       }
   }
 
@@ -468,15 +410,14 @@ int main(int argc, char *argv[]) {
 
         {
           glm::vec<3, float_v> vs = glm::vec<3, float_v>(origin) + ray_directions * tmins + float_v(0.5f);
-          prev_values = blockedVolumeSampler(blocked_volume, block_z_stride, block_y_stride, block_x_stride, vs.x * (width - 1), vs.y * (height - 1), vs.z * (depth - 1), tmins <= tmaxs);
+          prev_values = blockedVolumeSampler(blocked_volume, vs.x, vs.y, vs.z, tmins <= tmaxs);
           tmins += stepsize;
         }
 
         for (float_m mask = tmins <= tmaxs; !mask.isEmpty(); mask &= tmins <= tmaxs) {
           glm::vec<3, float_v> vs = glm::vec<3, float_v>(origin) + ray_directions * tmins + float_v(0.5f);
 
-          //float_v values = blockedVolumeSampler(blocked_volume, block_z_stride, block_y_stride, block_x_stride, vs.x * (width - 1), vs.y * (height - 1), vs.z * (depth - 1), mask);
-          float_v values = rawVolumeSampler(volume, vs.x, vs.y, vs.z, mask);
+          float_v values = blockedVolumeSampler(blocked_volume, vs.x, vs.y, vs.z, mask);
 
           float_v a = sampler2D<257, 257>(preintegratedTransferA.data(), values, prev_values, mask);
 
