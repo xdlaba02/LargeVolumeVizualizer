@@ -1,7 +1,7 @@
 #pragma once
 
 #include "mapped_file.h"
-#include "byteswap.h"
+#include "endian.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -37,14 +37,7 @@ public:
   }
 
   T operator[](uint64_t i) const {
-    T value = static_cast<const T *>(m_file.data())[i];
-
-    if constexpr (std::endian::native == std::endian::big) {
-      return byteswap(value);
-    }
-    else {
-      return value;
-    }
+    return static_cast<const LE<T> *>(m_file.data())[i];
   }
 
 private:

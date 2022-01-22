@@ -12,6 +12,7 @@ inline T byteswap(T value) {
 template<typename T, typename std::enable_if_t<sizeof(T) == 2, bool> = true>
 inline T byteswap(T value) {
   uint16_t &num = reinterpret_cast<uint16_t>(value);
+  
   num = (num >> 8)
       | (num << 8);
 

@@ -1,16 +1,14 @@
 
 #include "raw_volume.h"
+#include "blocked_volume.h"
 #include "morton.h"
+#include "endian.h"
 
 #include <iostream>
 #include <fstream>
 #include <sstream>
 #include <vector>
 #include <cmath>
-
-template <typename T>
-using Block = std::array<T, 16 * 16 * 16>;
-
 
 int main(int argc, char *argv[]) {
   if (argc != 7) {
@@ -37,25 +35,25 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
+  BlockedVolume<uint8_t>::Info info(width, height, depth);
 
-  uint32_t width_in_blocks  = (width  + 14) / 15;
-  uint32_t height_in_blocks = (height + 14) / 15;
-  uint32_t depth_in_blocks  = (depth  + 14) / 15;
+  std::vector<uint8_t> mins(info.size_in_blocks);
+  std::vector<uint8_t> maxs(info.size_in_blocks);
+  std::vector<uint64_t> offsets(info.size_in_blocks);
 
-  uint64_t stride_in_blocks = width_in_blocks * height_in_blocks;
-  uint64_t size_in_blocks = stride_in_blocks * depth_in_blocks;
+  std::ofstream blocked_volume(argv[5], std::ofstream::binary);
+  if (!blocked_volume) {
+    std::cerr << "failed creating the blocked volume \n";
+    return 1;
+  }
 
-  std::vector<uint8_t> mins(size_in_blocks);
-  std::vector<uint8_t> maxs(size_in_blocks);
-  std::vector<uint64_t> offsets(size_in_blocks);
+  uint64_t offset = 0;
 
-  std::vector<Block<uint8_t>> blocks {};
+  for (uint32_t block_z = 0; block_z < info.depth_in_blocks; block_z++) {
+    for (uint32_t block_y = 0; block_y < info.height_in_blocks; block_y++) {
+      for (uint32_t block_x = 0; block_x < info.width_in_blocks; block_x++) {
 
-  for (uint32_t block_z = 0; block_z < depth_in_blocks; block_z++) {
-    for (uint32_t block_y = 0; block_y < height_in_blocks; block_y++) {
-      for (uint32_t block_x = 0; block_x < width_in_blocks; block_x++) {
-
-        uint64_t block_index = block_z * stride_in_blocks + block_y * width_in_blocks + block_x;
+        uint64_t block_index = block_z * info.stride_in_blocks + block_y * info.width_in_blocks + block_x;
 
         uint8_t &min = mins[block_index];
         uint8_t &max = maxs[block_index];
@@ -63,25 +61,25 @@ int main(int argc, char *argv[]) {
         min = 255;
         max = 0;
 
-        Block<uint8_t> block {};
-        for (uint32_t i = 0; i < std::size(block); i++) {
+        BlockedVolume<uint8_t>::Block block {};
+        for (uint32_t i = 0; i < BlockedVolume<uint8_t>::BLOCK_SIZE; i++) {
           uint32_t x, y, z;
-          morton::from_morton_index_4b_3d(i, x, y, z);
+          morton::from_index_4b_3d(i, x, y, z);
 
-          uint32_t original_x = std::min(block_x * 15 + x, width - 1);
-          uint32_t original_y = std::min(block_y * 15 + y, height - 1);
-          uint32_t original_z = std::min(block_z * 15 + z, depth - 1);
+          uint32_t original_x = std::min(block_x * BlockedVolume<uint8_t>::SUBVOLUME_SIDE + x, width - 1);
+          uint32_t original_y = std::min(block_y * BlockedVolume<uint8_t>::SUBVOLUME_SIDE + y, height - 1);
+          uint32_t original_z = std::min(block_z * BlockedVolume<uint8_t>::SUBVOLUME_SIDE + z, depth - 1);
 
           block[i] = volume(original_x, original_y, original_z);
 
-          min = std::min(min, block[i]);
-          max = std::max(max, block[i]);
+          min = std::min<uint8_t>(min, block[i]);
+          max = std::max<uint8_t>(max, block[i]);
 
         }
 
         if (min != max) {
-          offsets[block_index] = blocks.size();
-          blocks.push_back(block);
+          offsets[block_index] = offset++;
+          blocked_volume.write((const char *)block, sizeof(block));
         }
       }
     }
@@ -154,21 +152,13 @@ int main(int argc, char *argv[]) {
 
   */
 
-  std::ofstream blocked_volume(argv[5], std::ofstream::binary);
-  if (!blocked_volume) {
-    std::cerr << "failed creating the blocked volume \n";
-    return 1;
-  }
-
-  blocked_volume.write((const char *)blocks.data(), blocks.size() * sizeof(Block<uint8_t>));
-
   std::ofstream metadata(argv[6]);
   if (!metadata) {
     std::cerr << "failed creating the metadata file\n";
     return 1;
   }
 
-  metadata.write(reinterpret_cast<const char *>(mins.data()), size_in_blocks);
-  metadata.write(reinterpret_cast<const char *>(maxs.data()), size_in_blocks);
-  metadata.write(reinterpret_cast<const char *>(offsets.data()), size_in_blocks * sizeof(uint64_t));
+  metadata.write(reinterpret_cast<const char *>(mins.data()), info.size_in_blocks);
+  metadata.write(reinterpret_cast<const char *>(maxs.data()), info.size_in_blocks);
+  metadata.write(reinterpret_cast<const char *>(offsets.data()), info.size_in_blocks * sizeof(uint64_t));
 }
