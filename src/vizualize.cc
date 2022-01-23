@@ -37,8 +37,7 @@ inline void intersect_aabb_rays_single_origin(const glm::vec3& origin, glm::vec<
     tmaxs(t1 < tmaxs) = t1;
   }
 
-  tmins(tmins < 0.f) = std::numeric_limits<float>::infinity();
-  tmaxs(tmaxs < 0.f) = -std::numeric_limits<float>::infinity();
+  tmins(tmins < 0.f) = 0.f; // solves when ray hits box from behind
 }
 
 template <typename T>
@@ -324,13 +323,15 @@ int main(int argc, char *argv[]) {
     }
 
     // object space - volume in 3D interval <0, volume_size - 1>
-    // normalized object space - volume in 3D interval <-0.5, 0.5>
+    // normalized object space - volume in 3D interval <-0.5, 0.5> - good for transformations because origin is at center of the volume.
 
     glm::mat4 model = glm::translate(glm::mat4(1.f), volume_pos) * glm::rotate(glm::mat4(1.f), t, glm::vec3(0.f, 1.f, 0.f)) * glm::rotate(glm::mat4(1.f), glm::radians(90.f), glm::vec3(1.f, 0.f, 0.f)) * glm::scale(glm::mat4(1.f), volume_scale);
     glm::mat4 model_inverse = glm::inverse(model);
 
     glm::mat4 view = glm::lookAt(camera_pos, camera_pos + camera_front, camera_up);
     glm::mat4 view_inverse = glm::inverse(view);
+
+    glm::mat4 model_view_inverse = model_inverse * view_inverse;
 
     #pragma omp parallel for schedule(dynamic)
     for (uint32_t j = 0; j < window.height(); j++) {
@@ -344,7 +345,7 @@ int main(int argc, char *argv[]) {
         glm::vec<3, simd::float_v> ray_directions {};
 
         for (uint32_t k = 0; k < simd::len; k++) {
-          glm::vec4 direction = glm::normalize(model_inverse * view_inverse * glm::vec4(xs[k], y, -1, 0)); // generate ray in view space and transform to world space
+          glm::vec4 direction = model_view_inverse * glm::normalize(glm::vec4(xs[k], y, -1, 0)); // generate ray in view space and transform to world space
           ray_directions.x[k] = direction.x;
           ray_directions.y[k] = direction.y;
           ray_directions.z[k] = direction.z;
