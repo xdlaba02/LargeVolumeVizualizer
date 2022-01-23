@@ -35,6 +35,9 @@ inline void intersect_aabb_rays_single_origin(const glm::vec3& origin, glm::vec<
     tmins(t0 > tmins) = t0;
     tmaxs(t1 < tmaxs) = t1;
   }
+
+  tmins(tmins < 0.f) = std::numeric_limits<float>::infinity();
+  tmaxs(tmaxs < 0.f) = -std::numeric_limits<float>::infinity();
 }
 
 template <typename T>
@@ -220,28 +223,79 @@ int main(int argc, char *argv[]) {
   Window window(1920, 1080, "Volumetric Vizualizer");
 
   float time = 0.f;
+  constexpr float delta_time = 0.1f;
+  constexpr float camera_speed = 2.5f * delta_time;
+
+  glm::vec2 prev_pos;
+  window.getCursor(prev_pos.x, prev_pos.y);
+
+  float yaw = -90;
+  float pitch = 0;
+
+  glm::vec3 camera_pos   = glm::vec3(0.0f, 0.0f, 3.0f);
+  glm::vec3 camera_front = glm::vec3(0.0f, 0.0f, -1.0f);
+  glm::vec3 camera_up    = glm::vec3(0.0f, 1.0f, 0.0f);
+
+  constexpr float yFOV = std::tan(45 * M_PI / 180 * 0.5);
+  float aspect = float(window.width()) / float(window.height());
+
   while (!window.shouldClose()) {
 
-    glm::mat4 model = glm::rotate(glm::mat4(1.0f), -time, glm::vec3(0.0, 1.0, 0.0)) * glm::rotate(glm::mat4(1.0f), glm::radians(90.f), glm::vec3(1.0, 0.0, 0.0));
+    {
+      glm::vec2 pos;
 
-    glm::vec3 origin = glm::vec3(1, 0, 0) * 2.f;
-    glm::mat4 view = glm::lookAt(origin, { 0, 0, 0 }, {0, 1, 0 }) * model;
+      window.getCursor(pos.x, pos.y);
 
-    origin = glm::vec4(origin, 1) * model;
+      constexpr float sensitivity = 0.1f;
+      glm::vec2 offset = (pos - prev_pos) * sensitivity;
+
+      prev_pos = pos;
+
+      yaw   += offset.x;
+      pitch -= offset.y;
+
+      pitch = std::clamp(pitch, std::nextafter(-90.f, 0.f), std::nextafter(90.f, 0.f));
+
+      glm::vec3 front {
+        std::cos(glm::radians(yaw)) * std::cos(glm::radians(pitch)),
+        std::sin(glm::radians(pitch)),
+        std::sin(glm::radians(yaw)) * std::cos(glm::radians(pitch)),
+      };
+
+      camera_front = glm::normalize(front);
+    }
+
+    {
+      if (window.getKey(GLFW_KEY_ESCAPE) == GLFW_PRESS) {
+        window.shouldClose(true);
+      }
+
+      if (window.getKey(GLFW_KEY_W) == GLFW_PRESS) {
+        camera_pos += camera_speed * camera_front;
+      }
+
+      if (window.getKey(GLFW_KEY_S) == GLFW_PRESS) {
+        camera_pos -= camera_speed * camera_front;
+      }
+
+      if (window.getKey(GLFW_KEY_A) == GLFW_PRESS) {
+        camera_pos -= glm::normalize(glm::cross(camera_front, camera_up)) * camera_speed;
+      }
+
+      if (window.getKey(GLFW_KEY_D) == GLFW_PRESS) {
+        camera_pos += glm::normalize(glm::cross(camera_front, camera_up)) * camera_speed;
+      }
+    }
+
+    glm::mat4 view = glm::lookAt(camera_pos, camera_pos + camera_front, camera_up);
 
     #pragma omp parallel for schedule(dynamic)
     for (uint32_t j = 0; j < window.height(); j++) {
-
-      constexpr float cameraFOV = std::tan(45 * M_PI / 180 * 0.5);
-
-      float y = (2 * (j + 0.5) / window.height() - 1) * cameraFOV;
+      float y = (2 * (j + 0.5) / window.height() - 1) * yFOV;
 
       for (uint32_t i = 0; i < window.width(); i += simd::len) {
         simd::float_v is = simd::float_v::IndexesFromZero() + i;
-
-        float aspect = float(window.width()) / float(window.height());
-
-        simd::float_v xs = (2 * (is + 0.5f) / float(window.width()) - 1) * aspect * cameraFOV;
+        simd::float_v xs = (2 * (is + 0.5f) / float(window.width()) - 1) * aspect * yFOV;
 
         glm::vec<3, simd::float_v> ray_directions {};
 
@@ -253,7 +307,7 @@ int main(int argc, char *argv[]) {
         }
 
         simd::float_v tmins, tmaxs;
-        intersect_aabb_rays_single_origin(origin, ray_directions, {-.5, -.5, -.5}, {+.5, +.5, +.5}, tmins, tmaxs);
+        intersect_aabb_rays_single_origin(camera_pos, ray_directions, {-.5, -.5, -.5}, {+.5, +.5, +.5}, tmins, tmaxs);
 
         glm::vec<4, simd::float_v> dsts(0.f, 0.f, 0.f, 1.f);
 
@@ -262,13 +316,13 @@ int main(int argc, char *argv[]) {
         simd::float_v prev_values {};
 
         {
-          glm::vec<3, simd::float_v> vs = glm::vec<3, simd::float_v>(origin) + ray_directions * tmins + simd::float_v(0.5f);
+          glm::vec<3, simd::float_v> vs = glm::vec<3, simd::float_v>(camera_pos) + ray_directions * tmins + simd::float_v(0.5f);
           prev_values = blockedVolumeSampler(blocked_volume, vs.x, vs.y, vs.z, tmins <= tmaxs);
           tmins += stepsize;
         }
 
         for (simd::float_m mask = tmins <= tmaxs; !mask.isEmpty(); mask &= tmins <= tmaxs) {
-          glm::vec<3, simd::float_v> vs = glm::vec<3, simd::float_v>(origin) + ray_directions * tmins + simd::float_v(0.5f);
+          glm::vec<3, simd::float_v> vs = glm::vec<3, simd::float_v>(camera_pos) + ray_directions * tmins + simd::float_v(0.5f);
 
           simd::float_v values = blockedVolumeSampler(blocked_volume, vs.x, vs.y, vs.z, mask);
 
@@ -313,6 +367,6 @@ int main(int argc, char *argv[]) {
     window.swapBuffers();
     window.pollEvents();
 
-    time += 0.1f;
+    time += delta_time;
   }
 }

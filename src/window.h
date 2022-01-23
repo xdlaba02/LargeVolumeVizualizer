@@ -23,6 +23,8 @@ public:
       return;
     }
 
+    glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);  
+
     glfwMakeContextCurrent(m_window);
 
     m_raster.resize(width * height * 3);
@@ -45,6 +47,21 @@ public:
 
   void pollEvents() {
     glfwPollEvents();
+  }
+
+  int getKey(int key) {
+    return glfwGetKey(m_window, key);
+  }
+
+  void getCursor(float &x, float &y) {
+    double xpos, ypos;
+    glfwGetCursorPos(m_window, &xpos, &ypos);
+    x = xpos;
+    y = ypos;
+  }
+
+  void shouldClose(bool shouldClose) {
+    glfwSetWindowShouldClose(m_window, shouldClose);
   }
 
   uint8_t *raster() {
