@@ -4,13 +4,12 @@
 #include "blocked_volume.h"
 #include "linear_gradient.h"
 #include "preintegrated_transfer_function.h"
-#include "fast_div.h"
+#include "vizualize_args.h"
+#include "window.h"
 #include "simd.h"
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-
-#include <GLFW/glfw3.h>
 
 #include <iostream>
 #include <fstream>
@@ -105,9 +104,9 @@ inline simd::float_v blockedVolumeSampler(const BlockedVolume<uint8_t> &volume, 
   simd::float_v frac_ys = ys - pix_ys;
   simd::float_v frac_zs = zs - pix_zs;
 
-  simd::uint32_v block_xs = fast_div<15>(pix_xs);
-  simd::uint32_v block_ys = fast_div<15>(pix_ys);
-  simd::uint32_v block_zs = fast_div<15>(pix_zs);
+  simd::uint32_v block_xs = simd::fast_div<15>(pix_xs);
+  simd::uint32_v block_ys = simd::fast_div<15>(pix_ys);
+  simd::uint32_v block_zs = simd::fast_div<15>(pix_zs);
 
   // reminder from division
   simd::uint32_v in_block_xs = pix_xs - ((block_xs << 4) - block_xs);
@@ -179,39 +178,20 @@ inline simd::float_v blockedVolumeSampler(const BlockedVolume<uint8_t> &volume, 
 };
 
 int main(int argc, char *argv[]) {
-  if (!glfwInit()) {
-      printf("Couldn't init GLFW\n");
-      return 1;
-  }
-
-  constexpr uint32_t window_width = 1920;
-  constexpr uint32_t window_height = 1080;
-
-  GLFWwindow *window = glfwCreateWindow(window_width, window_height, "Ahoj", NULL, NULL);
-  if (!window) {
-      printf("Couldn't open window\n");
-      return 1;
-  }
-
-  glfwMakeContextCurrent(window);
-
+  const char *processed_volume;
+  const char *processed_metadata;
   uint32_t width;
   uint32_t height;
   uint32_t depth;
 
-  {
-    std::stringstream wstream(argv[3]);
-    std::stringstream hstream(argv[4]);
-    std::stringstream dstream(argv[5]);
-    wstream >> width;
-    hstream >> height;
-    dstream >> depth;
+  if (!parse_args(argc, argv, processed_volume, processed_metadata, width, height, depth)) {
+    return 1;
   }
 
-  BlockedVolume<uint8_t> blocked_volume(argv[1], argv[2], width, height, depth);
+  BlockedVolume<uint8_t> blocked_volume(processed_volume, processed_metadata, width, height, depth);
 
   if (!blocked_volume) {
-    std::cerr << "blocked_volume failed\n";
+    std::cerr << "ERROR: Unable to open volume!\n";
     return 1;
   }
 
@@ -235,15 +215,12 @@ int main(int argc, char *argv[]) {
   PreintegratedTransferFunction<uint8_t> preintegratedTransferB([&](float v){ return linear_gradient(color_map, v).b; });
   PreintegratedTransferFunction<uint8_t> preintegratedTransferA([&](float v){ return linear_gradient(alpha_map, v); });
 
-  std::vector<uint8_t> raster(window_width * window_height * 3);
-
-  uint64_t rgb_x_stride = 3;
-  uint64_t rgb_y_stride = window_width * rgb_x_stride;
-
   simd::uint32_v pixel_offsets = simd::uint32_v::IndexesFromZero() * 3;
 
+  Window window(1920, 1080, "Volumetric Vizualizer");
+
   float time = 0.f;
-  while (!glfwWindowShouldClose(window)) {
+  while (!window.shouldClose()) {
 
     glm::mat4 model = glm::rotate(glm::mat4(1.0f), -time, glm::vec3(0.0, 1.0, 0.0)) * glm::rotate(glm::mat4(1.0f), glm::radians(90.f), glm::vec3(1.0, 0.0, 0.0));
 
@@ -253,18 +230,18 @@ int main(int argc, char *argv[]) {
     origin = glm::vec4(origin, 1) * model;
 
     #pragma omp parallel for schedule(dynamic)
-    for (uint32_t j = 0; j < window_height; j++) {
+    for (uint32_t j = 0; j < window.height(); j++) {
 
       constexpr float cameraFOV = std::tan(45 * M_PI / 180 * 0.5);
 
-      float y = (2 * (j + 0.5) / window_height - 1) * cameraFOV;
+      float y = (2 * (j + 0.5) / window.height() - 1) * cameraFOV;
 
-      for (uint32_t i = 0; i < window_width; i += simd::len) {
+      for (uint32_t i = 0; i < window.width(); i += simd::len) {
         simd::float_v is = simd::float_v::IndexesFromZero() + i;
 
-        constexpr float aspect = float(window_width) / float(window_height);
+        float aspect = float(window.width()) / float(window.height());
 
-        simd::float_v xs = (2 * (is + 0.5f) / float(window_width) - 1) * aspect * cameraFOV;
+        simd::float_v xs = (2 * (is + 0.5f) / float(window.width()) - 1) * aspect * cameraFOV;
 
         glm::vec<3, simd::float_v> ray_directions {};
 
@@ -308,7 +285,6 @@ int main(int argc, char *argv[]) {
 
             simd::float_v coef = a * dsts.a;
 
-            // Evaluate the current opacity
             dsts.r(mask) += r * coef;
             dsts.g(mask) += g * coef;
             dsts.b(mask) += b * coef;
@@ -326,7 +302,7 @@ int main(int argc, char *argv[]) {
         dsts.g *= 255;
         dsts.b *= 255;
 
-        uint8_t *rgb_start = raster.data() + j * rgb_y_stride + i * rgb_x_stride;
+        uint8_t *rgb_start = window.raster(i, j);
 
         dsts.r.scatter(rgb_start + 0, pixel_offsets);
         dsts.g.scatter(rgb_start + 1, pixel_offsets);
@@ -334,10 +310,8 @@ int main(int argc, char *argv[]) {
       }
     }
 
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glDrawPixels(window_width, window_height, GL_RGB, GL_UNSIGNED_BYTE, raster.data());
-    glfwSwapBuffers(window);
-    glfwPollEvents();
+    window.swapBuffers();
+    window.pollEvents();
 
     time += 0.1f;
   }
