@@ -42,10 +42,6 @@ inline void intersect_aabb_rays_single_origin(const glm::vec3& origin, glm::vec<
 
 template <typename T>
 inline simd::float_v rawVolumeSampler(const RawVolume<T> &volume, simd::float_v xs, simd::float_v ys, simd::float_v zs, simd::float_m mask) {
-  xs *= volume.info.width - 1;
-  ys *= volume.info.height - 1;
-  zs *= volume.info.depth - 1;
-
   simd::uint32_v pix_xs = xs;
   simd::uint32_v pix_ys = ys;
   simd::uint32_v pix_zs = zs;
@@ -95,10 +91,6 @@ inline simd::float_v rawVolumeSampler(const RawVolume<T> &volume, simd::float_v 
 };
 
 inline simd::float_v blockedVolumeSampler(const BlockedVolume<uint8_t> &volume, simd::float_v xs, simd::float_v ys, simd::float_v zs, simd::float_m mask) {
-  xs *= volume.info.width - 1;
-  ys *= volume.info.height - 1;
-  zs *= volume.info.depth - 1;
-
   simd::uint32_v pix_xs = xs;
   simd::uint32_v pix_ys = ys;
   simd::uint32_v pix_zs = zs;
@@ -204,11 +196,11 @@ int main(int argc, char *argv[]) {
   };
 
   std::map<float, float> alpha_map {
-    {40.f,  000.0f},
-    {60.f,  001.0f},
-    {63.f,  005.0f},
-    {80.f,  000.0f},
-    {82.f,  100.0f},
+    {40.f,  000.f},
+    {60.f,  001.f},
+    {63.f,  005.f},
+    {80.f,  000.f},
+    {82.f,  100.f},
     //{151.f,  0.0f},
     //{152.f,  1.0f},
   };
@@ -231,8 +223,7 @@ int main(int argc, char *argv[]) {
   float pitch = 0;
 
   glm::vec3 camera_pos   = glm::vec3(0.0f, 0.0f, 10.0f);
-  glm::vec3 camera_front = glm::vec3(0.0f, 0.0f, -1.0f);
-  glm::vec3 camera_up    = glm::vec3(0.0f, 1.0f, 0.0f);
+  constexpr glm::vec3 camera_up = glm::vec3(0.0f, 1.0f, 0.0f);
 
   glm::vec3 volume_pos   = glm::vec3(0.0f, 0.0f, 0.0f);
   glm::vec3 volume_scale = glm::vec3(1.0f, 1.0f, 1.0f);
@@ -264,74 +255,82 @@ int main(int argc, char *argv[]) {
       pitch -= offset.y;
 
       pitch = std::clamp(pitch, std::nextafter(-90.f, 0.f), std::nextafter(90.f, 0.f));
-
-      glm::vec3 front {
-        std::cos(glm::radians(yaw)) * std::cos(glm::radians(pitch)),
-        std::sin(glm::radians(pitch)),
-        std::sin(glm::radians(yaw)) * std::cos(glm::radians(pitch)),
-      };
-
-      camera_front = glm::normalize(front);
     }
 
+    glm::vec3 camera_front = glm::normalize(glm::vec3{
+      std::cos(glm::radians(yaw)) * std::cos(glm::radians(pitch)),
+      std::sin(glm::radians(pitch)),
+      std::sin(glm::radians(yaw)) * std::cos(glm::radians(pitch)),
+    });
+
     {
-      constexpr float camera_speed = 1.f;
+      const float speed = 1.f * delta;
 
       if (window.getKey(GLFW_KEY_ESCAPE) == GLFW_PRESS) {
         window.shouldClose(true);
       }
 
       if (window.getKey(GLFW_KEY_W) == GLFW_PRESS) {
-        camera_pos += camera_speed * delta * camera_front;
+        camera_pos += speed * camera_front;
       }
 
       if (window.getKey(GLFW_KEY_S) == GLFW_PRESS) {
-        camera_pos -= camera_speed * delta * camera_front;
+        camera_pos -= speed * camera_front;
       }
 
       if (window.getKey(GLFW_KEY_A) == GLFW_PRESS) {
-        camera_pos -= glm::normalize(glm::cross(camera_front, camera_up)) * camera_speed * delta;
+        camera_pos -= glm::normalize(glm::cross(camera_front, camera_up)) * speed;
       }
 
       if (window.getKey(GLFW_KEY_D) == GLFW_PRESS) {
-        camera_pos += glm::normalize(glm::cross(camera_front, camera_up)) * camera_speed * delta;
+        camera_pos += glm::normalize(glm::cross(camera_front, camera_up)) * speed;
       }
 
       if (window.getKey(GLFW_KEY_Q) == GLFW_PRESS) {
-        volume_pos -= glm::vec3(1.f, 0.f, 0.f) * delta;
+        volume_pos.x -= speed;
       }
 
       if (window.getKey(GLFW_KEY_E) == GLFW_PRESS) {
-        volume_pos += glm::vec3(1.f, 0.f, 0.f) * delta;
+        volume_pos += speed;
       }
 
       if (window.getKey(GLFW_KEY_UP) == GLFW_PRESS) {
-        volume_scale.x += 0.1f * delta;
+        volume_scale += 0.1 * delta;
       }
 
       if (window.getKey(GLFW_KEY_DOWN) == GLFW_PRESS) {
-        volume_scale.x -= 0.1f * delta;
+        volume_scale -= 0.1 * delta;
       }
 
       if (window.getKey(GLFW_KEY_RIGHT) == GLFW_PRESS) {
-        volume_scale.y += 0.1 * delta;
+        volume_scale.x += 0.1 * delta;
       }
 
       if (window.getKey(GLFW_KEY_LEFT) == GLFW_PRESS) {
-        volume_scale.y -= 0.1 * delta;
+        volume_scale.x -= 0.1 * delta;
       }
     }
 
     // object space - volume in 3D interval <0, volume_size - 1>
     // normalized object space - volume in 3D interval <-0.5, 0.5> - good for transformations because origin is at center of the volume.
 
-    glm::mat4 model = glm::translate(glm::mat4(1.f), volume_pos) * glm::rotate(glm::mat4(1.f), t, glm::vec3(0.f, 1.f, 0.f)) * glm::rotate(glm::mat4(1.f), glm::radians(90.f), glm::vec3(1.f, 0.f, 0.f)) * glm::scale(glm::mat4(1.f), volume_scale);
+    glm::mat4 norm = glm::translate(glm::mat4(1.f), glm::vec3(-0.5f, -0.5f, -0.5f))
+                   * glm::scale(glm::mat4(1.f), glm::vec3(1.f / (blocked_volume.info.width - 1), 1.f / (blocked_volume.info.height - 1), 1.f / (blocked_volume.info.depth - 1)));
+
+    glm::mat4 norm_invese = glm::inverse(norm);
+
+    glm::mat4 model = glm::translate(glm::mat4(1.f), volume_pos)
+                    * glm::rotate(glm::mat4(1.f), t, glm::vec3(0.f, 1.f, 0.f))
+                    * glm::rotate(glm::mat4(1.f), glm::radians(90.f), glm::vec3(1.f, 0.f, 0.f))
+                    * glm::scale(glm::mat4(1.f), volume_scale);
+
     glm::mat4 model_inverse = glm::inverse(model);
 
     glm::mat4 view = glm::lookAt(camera_pos, camera_pos + camera_front, camera_up);
     glm::mat4 view_inverse = glm::inverse(view);
 
-    glm::mat4 model_view_inverse = model_inverse * view_inverse;
+    glm::mat4 norm_model_inverse = norm_invese * model_inverse;
+    glm::mat4 norm_model_view_inverse = norm_model_inverse * view_inverse;
 
     #pragma omp parallel for schedule(dynamic)
     for (uint32_t j = 0; j < window.height(); j++) {
@@ -341,35 +340,34 @@ int main(int argc, char *argv[]) {
         simd::float_v is = simd::float_v::IndexesFromZero() + i;
         simd::float_v xs = (2 * (is + 0.5f) / float(window.width()) - 1) * aspect * yFOV;
 
-        glm::vec3 ray_origin = model_inverse * glm::vec4(camera_pos, 1); // camera_pos is in world space, transform to normalized model space
+        glm::vec3 ray_origin = norm_model_inverse * glm::vec4(camera_pos, 1); // camera_pos is in world space, transform to object space
         glm::vec<3, simd::float_v> ray_directions {};
 
         for (uint32_t k = 0; k < simd::len; k++) {
-          glm::vec4 direction = model_view_inverse * glm::normalize(glm::vec4(xs[k], y, -1, 0)); // generate ray in view space and transform to world space
+          glm::vec4 direction = norm_model_view_inverse * glm::normalize(glm::vec4(xs[k], y, -1, 0)); // generate ray in view space and transform to object space
           ray_directions.x[k] = direction.x;
           ray_directions.y[k] = direction.y;
           ray_directions.z[k] = direction.z;
         }
 
         simd::float_v tmins, tmaxs;
-        intersect_aabb_rays_single_origin(ray_origin, ray_directions, {-.5, -.5, -.5}, {+.5, +.5, +.5}, tmins, tmaxs);
+        intersect_aabb_rays_single_origin(ray_origin, ray_directions, {0, 0, 0}, {blocked_volume.info.width - 1, blocked_volume.info.height - 1, blocked_volume.info.depth - 1}, tmins, tmaxs);
 
         glm::vec<4, simd::float_v> dsts(0.f, 0.f, 0.f, 1.f);
 
-        constexpr float stepsize = 0.002f;
+        constexpr float stepsize = 0.005f;
 
-        simd::float_v prev_values {};
+        glm::vec<3, simd::float_v> samples = glm::vec<3, simd::float_v>(ray_origin) + ray_directions * tmins;
+        glm::vec<3, simd::float_v> steps = ray_directions * simd::float_v(stepsize);
 
-        {
-          glm::vec<3, simd::float_v> vs = glm::vec<3, simd::float_v>(ray_origin) + ray_directions * tmins + simd::float_v(0.5f); // add 0.5 in all dimensions to transform from normalized object space to
-          prev_values = blockedVolumeSampler(blocked_volume, vs.x, vs.y, vs.z, tmins <= tmaxs);
-          tmins += stepsize;
-        }
+        simd::float_v prev_values = blockedVolumeSampler(blocked_volume, samples.x, samples.y, samples.z, tmins <= tmaxs);
+
+        tmins += stepsize;
 
         for (simd::float_m mask = tmins <= tmaxs; !mask.isEmpty(); mask &= tmins <= tmaxs) {
-          glm::vec<3, simd::float_v> vs = glm::vec<3, simd::float_v>(ray_origin) + ray_directions * tmins + simd::float_v(0.5f); // add 0.5 in all dimensions to transform from normalized object space to
+          samples += steps;
 
-          simd::float_v values = blockedVolumeSampler(blocked_volume, vs.x, vs.y, vs.z, mask);
+          simd::float_v values = blockedVolumeSampler(blocked_volume, samples.x, samples.y, samples.z, mask);
 
           simd::float_v a = preintegratedTransferA(values, prev_values, mask);
 
@@ -389,7 +387,7 @@ int main(int argc, char *argv[]) {
             dsts.b(mask) += b * coef;
             dsts.a(mask) *= 1 - a;
 
-            mask &= dsts.a > 0.01f;
+            mask &= dsts.a > 1.f/256.f;
           }
 
           prev_values = values;
