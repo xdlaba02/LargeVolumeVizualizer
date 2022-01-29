@@ -6,9 +6,9 @@
 
 #include <vector>
 
-class Window {
+class GLFW {
 public:
-  Window(uint32_t width, uint32_t height, const char *name = "window") {
+  GLFW(uint32_t width, uint32_t height, const char *name = "window") {
     m_width = width;
     m_height = height;
 
@@ -23,14 +23,14 @@ public:
       return;
     }
 
-    glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);  
+    glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
     glfwMakeContextCurrent(m_window);
 
     m_raster.resize(width * height * 3);
   }
 
-  ~Window() {
+  ~GLFW() {
     glfwDestroyWindow(m_window);
     glfwTerminate();
   }

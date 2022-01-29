@@ -29,7 +29,7 @@ public:
     return sampler2D<S>(reinterpret_cast<float *>(m_data), v0 / sizeof(T), v1 / sizeof(T));
   }
 private:
-  static constexpr uint32_t N = 256;
+  static constexpr uint32_t N = 1 << 8;
   static constexpr uint32_t S = N + 1;
   float m_data[S][S];
 };
