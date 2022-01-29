@@ -33,6 +33,6 @@ add_executable(vizualize src/vizualize.cc)
 add_executable(process src/process.cc)
 
 target_link_libraries_system(vizualize glm glfw OpenGL::GL Vc)
-target_link_libraries_system(process Vc)
+target_link_libraries_system(process Vc glm)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)

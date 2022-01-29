@@ -65,7 +65,7 @@ int main(int argc, char *argv[]) {
 
   Integrator integrator(transfer_function);
 
-  simd::uint32_v pixel_offsets = simd::uint32_v::IndexesFromZero() * 3;
+  simd::uint32_v triplet_offsets = simd::uint32_v::IndexesFromZero() * 3;
 
   GLFW glfw(1920, 1080, "Volumetric Vizualizer");
 
@@ -77,7 +77,7 @@ int main(int argc, char *argv[]) {
   float yaw = -90;
   float pitch = 0;
 
-  glm::vec3 camera_pos   = glm::vec3(0.0f, 0.0f, 10.0f);
+  glm::vec3 camera_pos   = glm::vec3(0.0f, 0.0f, 1.0f);
   constexpr glm::vec3 camera_up = glm::vec3(0.0f, 1.0f, 0.0f);
 
   glm::vec3 volume_pos   = glm::vec3(0.0f, 0.0f, 0.0f);
@@ -199,7 +199,7 @@ int main(int argc, char *argv[]) {
         glm::vec<3, simd::float_v> ray_directions {};
 
         for (uint32_t k = 0; k < simd::len; k++) {
-          glm::vec4 direction = norm_model_view_inverse * glm::normalize(glm::vec4(xs[k], y, -1, 0)); // generate ray normalized in view space and transform to object space
+          glm::vec3 direction = norm_model_view_inverse * glm::normalize(glm::vec4(xs[k], y, -1, 0)); // generate ray normalized in view space and transform to object space
           ray_directions.x[k] = direction.x;
           ray_directions.y[k] = direction.y;
           ray_directions.z[k] = direction.z;

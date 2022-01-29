@@ -1,9 +1,13 @@
 #pragma once
 
 #include "mapped_file.h"
+#include "intersection.h"
 #include "endian.h"
 #include "simd.h"
 #include "morton.h"
+#include "preintegrated_transfer_function.h"
+
+#include <glm/glm.hpp>
 
 #include <cstdint>
 #include <cstddef>
@@ -196,7 +200,7 @@ public:
 
     int32_t buffers[2][2][2];
 
-    uint64_t index = block_z * m_info.stride_in_block + block_y * m_info.width_in_block + block_x;
+    uint64_t index = block_z * m_info.stride_in_blocks + block_y * m_info.width_in_blocks + block_x;
     T min = m_mins[index];
     T max = m_maxs[index];
 
@@ -238,6 +242,77 @@ public:
     return accs[0][0];
   };
 
+  glm::vec4 integrate(const glm::vec3 &origin, const glm::vec3 &direction, float stepsize, const PreintegratedTransferFunction<uint8_t> &transfer_r, const PreintegratedTransferFunction<uint8_t> &transfer_g, const PreintegratedTransferFunction<uint8_t> &transfer_b, const PreintegratedTransferFunction<uint8_t> &transfer_a) const {
+
+    glm::vec3 step = direction * stepsize;
+    glm::vec4 dst(0.f, 0.f, 0.f, 1.f);
+
+    traverse(origin, direction, [&](const glm::vec<3, uint32_t> &block_pos, const glm::vec3 &in_block_pos, float tmax) {
+      //std::cerr << block_pos.x << " " << block_pos.y << " " << block_pos.z << " | " << in_block_pos.x << " " << in_block_pos.y << " " << in_block_pos.z << " | " << tmax << "\n";
+
+      uint64_t index = block_pos.z * m_info.stride_in_blocks + block_pos.y * m_info.width_in_blocks + block_pos.x;
+
+      T min = m_mins[index];
+      T max = m_maxs[index];
+
+      if (min == max) { // fast integration
+        float a = transfer_a(min, max);
+
+        if (a > 0.f) { // empty space skipping
+          float r = transfer_r(min, max);
+          float g = transfer_g(min, max);
+          float b = transfer_b(min, max);
+
+          float alpha = 1.f - std::exp(-a * tmax);
+
+          float coef = alpha * dst.a;
+
+          dst.r += r * coef;
+          dst.g += g * coef;
+          dst.b += b * coef;
+          dst.a *= 1 - alpha;
+        }
+      }
+      else { // integration by sampling
+
+        float prev_value = sample_block(m_blocks[m_offsets[index]], in_block_pos);
+
+        glm::vec3 sample = in_block_pos + step;
+        float tmin = stepsize;
+
+        while (tmin <= tmax) {
+          float value = sample_block(m_blocks[m_offsets[index]], sample);
+
+          float a = transfer_a(value, prev_value);
+
+          if (a > 0.f) { // empty sample skipping
+            float r = transfer_r(value, prev_value);
+            float g = transfer_g(value, prev_value);
+            float b = transfer_b(value, prev_value);
+
+            float alpha = 1.f - std::exp(-a * std::min(stepsize, tmax - tmin));
+
+            float coef = alpha * dst.a;
+
+            dst.r += r * coef;
+            dst.g += g * coef;
+            dst.b += b * coef;
+            dst.a *= 1 - alpha;
+          }
+
+          prev_value = value;
+
+          tmin += stepsize;
+          sample += step;
+        }
+      }
+
+      return dst.a > 1.f / 256.f;
+    });
+
+    return dst;
+  }
+
   float width() const { return m_info.width; }
   float height() const { return m_info.height; }
   float depth() const { return m_info.depth; }
@@ -252,4 +327,128 @@ private:
   const LE<T> *m_mins;
   const LE<T> *m_maxs;
   const LE<uint64_t> *m_offsets;
+
+  template <typename F>
+  inline void traverse(const glm::vec3 &origin, const glm::vec3 &direction, const F& callback) const {
+
+    glm::vec3 t_delta;         // SUBVOLUME_SIDE / direction
+    glm::vec3 t_next_crossing; //
+
+    glm::vec<3, int32_t> cell;
+
+    glm::vec<3, int32_t> step;
+    glm::vec<3, int32_t> stop;
+
+    float t, t_end;
+
+    {
+      glm::vec<3, uint32_t> size = { m_info.width, m_info.height, m_info.depth };
+      glm::vec<3, uint32_t> size_in_blocks = { m_info.width_in_blocks, m_info.height_in_blocks, m_info.depth_in_blocks };
+
+      glm::vec3 direction_inverse = 1.f / direction;
+
+      intersect_aabb_ray(origin, direction_inverse, {0, 0, 0}, size, t, t_end);
+
+      if (t >= t_end) {
+        return;
+      }
+
+      glm::vec3 sample = origin + direction * t;
+
+      for (uint8_t i = 0; i < 3; i++) {
+        cell[i] = std::clamp<int32_t>(sample[i] / SUBVOLUME_SIDE, 0, size_in_blocks[i] - 1);
+
+        if (direction[i] < 0.f) {
+            t_delta[i] = -float(SUBVOLUME_SIDE) * direction_inverse[i];
+            t_next_crossing[i] = t + ((cell[i] + 0) * float(SUBVOLUME_SIDE) - sample[i]) * direction_inverse[i];
+            step[i] = -1;
+            stop[i] = 0;
+        }
+        else {
+            t_delta[i] = float(SUBVOLUME_SIDE) * direction_inverse[i];
+            t_next_crossing[i] = t + ((cell[i] + 1) * float(SUBVOLUME_SIDE) - sample[i]) * direction_inverse[i];
+            step[i] = 1;
+            stop[i] = size_in_blocks[i] - 1;
+        }
+      }
+    }
+
+
+    auto nearest_axis = [&]() {
+      uint8_t k = ((t_next_crossing[0] < t_next_crossing[1]) << 2)
+                | ((t_next_crossing[0] < t_next_crossing[2]) << 1)
+                | ((t_next_crossing[1] < t_next_crossing[2]) << 0);
+
+      constexpr uint8_t arr[8] { 2, 1, 2, 1, 2, 2, 0, 0 };
+
+      return arr[k];
+    };
+
+    uint8_t axis = nearest_axis();
+
+    while (cell[axis] != stop[axis]) {
+      if (!callback(cell, origin + direction * t - glm::vec3(cell * int32_t(SUBVOLUME_SIDE)), t_next_crossing[axis] - t)) {
+        return;
+      }
+
+      t = t_next_crossing[axis];
+
+      t_next_crossing[axis] += t_delta[axis];
+
+      cell[axis] += step[axis];
+
+      axis = nearest_axis();
+    }
+
+    callback(cell, origin + direction * t - glm::vec3(cell * int32_t(SUBVOLUME_SIDE)), t_end - t);
+  }
+
+  static inline float sample_block(const Block &block, const glm::vec3 &pos) {
+    glm::vec<3, uint32_t> pix = pos;
+
+    glm::vec3 frac = pos - glm::vec3(pix);
+
+    uint32_t in_block_xs0_interleaved = morton::interleave_4b_3d(pix.x + 0);
+    uint32_t in_block_xs1_interleaved = morton::interleave_4b_3d(pix.x + 1);
+    uint32_t in_block_ys0_interleaved = morton::interleave_4b_3d(pix.y + 0);
+    uint32_t in_block_ys1_interleaved = morton::interleave_4b_3d(pix.y + 1);
+    uint32_t in_block_zs0_interleaved = morton::interleave_4b_3d(pix.z + 0);
+    uint32_t in_block_zs1_interleaved = morton::interleave_4b_3d(pix.z + 1);
+
+    uint32_t offsets[2][2][2];
+
+    offsets[0][0][0] = morton::combine_interleaved(in_block_xs0_interleaved, in_block_ys0_interleaved, in_block_zs0_interleaved);
+    offsets[0][0][1] = morton::combine_interleaved(in_block_xs1_interleaved, in_block_ys0_interleaved, in_block_zs0_interleaved);
+    offsets[0][1][0] = morton::combine_interleaved(in_block_xs0_interleaved, in_block_ys1_interleaved, in_block_zs0_interleaved);
+    offsets[0][1][1] = morton::combine_interleaved(in_block_xs1_interleaved, in_block_ys1_interleaved, in_block_zs0_interleaved);
+    offsets[1][0][0] = morton::combine_interleaved(in_block_xs0_interleaved, in_block_ys0_interleaved, in_block_zs1_interleaved);
+    offsets[1][0][1] = morton::combine_interleaved(in_block_xs1_interleaved, in_block_ys0_interleaved, in_block_zs1_interleaved);
+    offsets[1][1][0] = morton::combine_interleaved(in_block_xs0_interleaved, in_block_ys1_interleaved, in_block_zs1_interleaved);
+    offsets[1][1][1] = morton::combine_interleaved(in_block_xs1_interleaved, in_block_ys1_interleaved, in_block_zs1_interleaved);
+
+    int32_t buffers[2][2][2];
+
+    buffers[0][0][0] = block[offsets[0][0][0]];
+    buffers[0][0][1] = block[offsets[0][0][1]];
+    buffers[0][1][0] = block[offsets[0][1][0]];
+    buffers[0][1][1] = block[offsets[0][1][1]];
+    buffers[1][0][0] = block[offsets[1][0][0]];
+    buffers[1][0][1] = block[offsets[1][0][1]];
+    buffers[1][1][0] = block[offsets[1][1][0]];
+    buffers[1][1][1] = block[offsets[1][1][1]];
+
+    float accs[2][2];
+
+    accs[0][0] = buffers[0][0][0] + (buffers[0][0][1] - buffers[0][0][0]) * frac.x;
+    accs[0][1] = buffers[0][1][0] + (buffers[0][1][1] - buffers[0][1][0]) * frac.x;
+    accs[1][0] = buffers[1][0][0] + (buffers[1][0][1] - buffers[1][0][0]) * frac.x;
+    accs[1][1] = buffers[1][1][0] + (buffers[1][1][1] - buffers[1][1][0]) * frac.x;
+
+    accs[0][0] += (accs[0][1] - accs[0][0]) * frac.y;
+    accs[1][0] += (accs[1][1] - accs[1][0]) * frac.y;
+
+    accs[0][0] += (accs[1][0] - accs[0][0]) * frac.z;
+
+    return accs[0][0];
+  }
 };

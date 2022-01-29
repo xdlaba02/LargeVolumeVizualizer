@@ -21,12 +21,12 @@ public:
     }
   }
 
-  simd::float_v operator()(simd::float_v v0, simd::float_v v1, simd::float_m mask) {
-    return sampler2D<S>(reinterpret_cast<float *>(m_data), v0 / sizeof(T), v1 / sizeof(T), mask);
+  simd::float_v operator()(simd::float_v v0, simd::float_v v1, simd::float_m mask) const {
+    return sampler2D<S>(reinterpret_cast<const float *>(m_data), v0 / sizeof(T), v1 / sizeof(T), mask);
   }
 
-  float operator()(float v0, float v1) {
-    return sampler2D<S>(reinterpret_cast<float *>(m_data), v0 / sizeof(T), v1 / sizeof(T));
+  float operator()(float v0, float v1) const {
+    return sampler2D<S>(reinterpret_cast<const float *>(m_data), v0 / sizeof(T), v1 / sizeof(T));
   }
 private:
   static constexpr uint32_t N = 1 << 8;

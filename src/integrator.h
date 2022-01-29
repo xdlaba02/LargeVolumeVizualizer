@@ -8,6 +8,10 @@
 
 #include <cstdint>
 
+
+// rekurzivni integrator, spusti se nad hornim uzlem, udela min max nad transfer function a zanoruje se podle toho ktere potomky protina a zastavi se v hloubce podle potreby pameti a kvality.
+// v kazde urovni traverse grid?
+
 template <typename F>
 class Integrator {
 public:
@@ -19,7 +23,7 @@ public:
 
   glm::vec4 integrate(const BlockedVolume<uint8_t> &volume, const glm::vec3 &origin, const glm::vec3 &direction) {
     float tmin, tmax;
-    intersect_aabb_ray(origin, direction, {0, 0, 0}, {volume.width() - 1, volume.height() - 1, volume.depth() - 1}, tmin, tmax);
+    intersect_aabb_ray(origin, 1.f / direction, {0, 0, 0}, {volume.width() - 1, volume.height() - 1, volume.depth() - 1}, tmin, tmax);
 
     glm::vec4 dst(0.f, 0.f, 0.f, 1.f);
 
@@ -71,7 +75,7 @@ public:
 
   glm::vec<4, simd::float_v> integrate(const BlockedVolume<uint8_t> &volume, const glm::vec3 &origin, const glm::vec<3, simd::float_v> &directions) {
     simd::float_v tmins, tmaxs;
-    intersect_aabb_rays_single_origin(origin, directions, {0, 0, 0}, {volume.width() - 1, volume.height() - 1, volume.depth() - 1}, tmins, tmaxs);
+    intersect_aabb_rays_single_origin(origin, simd::float_v(1.f) / directions, {0, 0, 0}, {volume.width() - 1, volume.height() - 1, volume.depth() - 1}, tmins, tmaxs);
 
     glm::vec<4, simd::float_v> dsts(0.f, 0.f, 0.f, 1.f);
 

@@ -17,8 +17,6 @@ ColorType linear_gradient(const std::map<float, ColorType> &colors, float value)
   }
   else {
     auto lowerIt = std::prev(it);
-    float diff = it->first - lowerIt->first;
-    float frac = diff ? (value - lowerIt->first) / diff : 0.5f;
-    return lowerIt->second + (it->second - lowerIt->second) * frac;
+    return lowerIt->second + (it->second - lowerIt->second) * (value - lowerIt->first) / (it->first - lowerIt->first);
   }
 }
