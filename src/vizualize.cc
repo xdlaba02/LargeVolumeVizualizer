@@ -54,16 +54,11 @@ int main(int argc, char *argv[]) {
     //{152.f,  1.0f},
   };
 
-  PreintegratedTransferFunction<uint8_t> preintegratedTransferR([&](float v){ return linear_gradient(color_map, v).r; });
-  PreintegratedTransferFunction<uint8_t> preintegratedTransferG([&](float v){ return linear_gradient(color_map, v).g; });
-  PreintegratedTransferFunction<uint8_t> preintegratedTransferB([&](float v){ return linear_gradient(color_map, v).b; });
-  PreintegratedTransferFunction<uint8_t> preintegratedTransferA([&](float v){ return linear_gradient(alpha_map, v); });
-
   auto transfer_function = [&](float v) {
     return glm::vec4(linear_gradient(color_map, v), linear_gradient(alpha_map, v));
   };
 
-  Integrator integrator(transfer_function);
+  Integrator<uint8_t> integrator(transfer_function);
 
   simd::uint32_v triplet_offsets = simd::uint32_v::IndexesFromZero() * 3;
 
@@ -166,11 +161,11 @@ int main(int argc, char *argv[]) {
       }
     }
 
-    // object space - volume in 3D interval <0, volume_size - 1>
+    // object space - volume in 3D interval <0, volume_size>
     // normalized object space - volume in 3D interval <-0.5, 0.5> - good for transformations because origin is at center of the volume.
 
     glm::mat4 norm = glm::translate(glm::mat4(1.f), glm::vec3(-0.5f, -0.5f, -0.5f))
-                   * glm::scale(glm::mat4(1.f), glm::vec3(1.f / (width - 1), 1.f / (height - 1), 1.f / (depth - 1)));
+                   * glm::scale(glm::mat4(1.f), glm::vec3(1.f / width, 1.f / height, 1.f / depth));
 
     glm::mat4 norm_invese = glm::inverse(norm);
 
@@ -187,6 +182,8 @@ int main(int argc, char *argv[]) {
     glm::mat4 norm_model_inverse = norm_invese * model_inverse;
     glm::mat4 norm_model_view_inverse = norm_model_inverse * view_inverse;
 
+    glm::vec3 ray_origin = norm_model_inverse * glm::vec4(camera_pos, 1); // camera_pos is in world space, transform to object space
+
     #pragma omp parallel for schedule(dynamic)
     for (uint32_t j = 0; j < glfw.height(); j++) {
       float y = (2 * (j + 0.5) / glfw.height() - 1) * yFOV;
@@ -195,23 +192,16 @@ int main(int argc, char *argv[]) {
         simd::float_v is = simd::float_v::IndexesFromZero() + i;
         simd::float_v xs = (2 * (is + 0.5f) / float(glfw.width()) - 1) * aspect * yFOV;
 
-        glm::vec3 ray_origin = norm_model_inverse * glm::vec4(camera_pos, 1); // camera_pos is in world space, transform to object space
-        glm::vec<3, simd::float_v> ray_directions {};
-
         for (uint32_t k = 0; k < simd::len; k++) {
           glm::vec3 direction = norm_model_view_inverse * glm::normalize(glm::vec4(xs[k], y, -1, 0)); // generate ray normalized in view space and transform to object space
-          ray_directions.x[k] = direction.x;
-          ray_directions.y[k] = direction.y;
-          ray_directions.z[k] = direction.z;
-        }
 
-        glm::vec<4, simd::uint32_v> dsts = integrator.integrate(blocked_volume, ray_origin, ray_directions) * simd::float_v(255.f);
+          glm::vec<4, uint32_t> dsts = integrator.integrate2(blocked_volume, ray_origin, direction, 0.005) * 255.f;
+          //glm::vec<4, uint32_t> dsts = integrator.integrate(blocked_volume, ray_origin, direction, 0.005) * 255.f;
 
-        for (uint32_t k = 0; k < simd::len; k++) {
           uint8_t *triplet = glfw.raster(i, j) + k * 3;
-          triplet[0] = dsts.r[k];
-          triplet[1] = dsts.g[k];
-          triplet[2] = dsts.b[k];
+          triplet[0] = dsts.r;
+          triplet[1] = dsts.g;
+          triplet[2] = dsts.b;
         }
       }
     }

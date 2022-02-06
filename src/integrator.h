@@ -12,34 +12,36 @@
 // rekurzivni integrator, spusti se nad hornim uzlem, udela min max nad transfer function a zanoruje se podle toho ktere potomky protina a zastavi se v hloubce podle potreby pameti a kvality.
 // v kazde urovni traverse grid?
 
-template <typename F>
+template <typename T>
 class Integrator {
 public:
+  template <typename F>
   Integrator(const F &transfer):
       m_transfer_r([&](float v){ return transfer(v).r; }),
       m_transfer_g([&](float v){ return transfer(v).g; }),
       m_transfer_b([&](float v){ return transfer(v).b; }),
       m_transfer_a([&](float v){ return transfer(v).a; }) {}
 
-  glm::vec4 integrate(const BlockedVolume<uint8_t> &volume, const glm::vec3 &origin, const glm::vec3 &direction) {
+  glm::vec4 integrate(const BlockedVolume<T> &volume, const glm::vec3 &origin, const glm::vec3 &direction, float stepsize) const {
     float tmin, tmax;
-    intersect_aabb_ray(origin, 1.f / direction, {0, 0, 0}, {volume.width() - 1, volume.height() - 1, volume.depth() - 1}, tmin, tmax);
+    intersect_aabb_ray(origin, 1.f / direction, {0, 0, 0}, {volume.info.width, volume.info.height, volume.info.depth}, tmin, tmax);
 
     glm::vec4 dst(0.f, 0.f, 0.f, 1.f);
 
-    glm::vec3 sample = origin + direction * tmin;
-    glm::vec3 step = direction * m_stepsize;
+    glm::vec3 sample = origin + direction * tmin - .5f;
 
     float prev_value {};
 
-    if (tmin <= tmax) {
+    if (tmin < tmax) {
       prev_value = volume.sample(sample.x, sample.y, sample.z);
-
-      tmin += m_stepsize;
-      sample += step;
     }
 
-    while (tmin <= tmax) {
+    while (tmin < tmax) {
+      float next_step = std::min(stepsize, tmax - tmin);
+
+      tmin += next_step;
+
+      sample += direction * next_step;
 
       float value = volume.sample(sample.x, sample.y, sample.z);
 
@@ -50,7 +52,7 @@ public:
         float g = m_transfer_g(value, prev_value);
         float b = m_transfer_b(value, prev_value);
 
-        float alpha = 1.f - std::exp(-a * std::min(m_stepsize, tmax - tmin));
+        float alpha = 1.f - std::exp(-a * next_step);
 
         float coef = alpha * dst.a;
 
@@ -65,29 +67,28 @@ public:
       }
 
       prev_value = value;
-
-      tmin += m_stepsize;
-      sample += step;
     }
 
     return dst;
   }
 
-  glm::vec<4, simd::float_v> integrate(const BlockedVolume<uint8_t> &volume, const glm::vec3 &origin, const glm::vec<3, simd::float_v> &directions) {
+  glm::vec<4, simd::float_v> integrate(const BlockedVolume<T> &volume, const glm::vec3 &origin, const glm::vec<3, simd::float_v> &directions, float stepsize) const {
     simd::float_v tmins, tmaxs;
-    intersect_aabb_rays_single_origin(origin, simd::float_v(1.f) / directions, {0, 0, 0}, {volume.width() - 1, volume.height() - 1, volume.depth() - 1}, tmins, tmaxs);
+    intersect_aabb_rays_single_origin(origin, simd::float_v(1.f) / directions, {0, 0, 0}, {volume.info.width, volume.info.height, volume.info.depth}, tmins, tmaxs);
 
     glm::vec<4, simd::float_v> dsts(0.f, 0.f, 0.f, 1.f);
 
-    glm::vec<3, simd::float_v> samples = glm::vec<3, simd::float_v>(origin) + directions * tmins;
-    glm::vec<3, simd::float_v> steps = directions * simd::float_v(m_stepsize);
+    glm::vec<3, simd::float_v> samples = glm::vec<3, simd::float_v>(origin) + directions * tmins - simd::float_v(.5f);
 
-    simd::float_v prev_values = volume.samples(samples.x, samples.y, samples.z, tmins <= tmaxs);
+    simd::float_v prev_values = volume.samples(samples.x, samples.y, samples.z, tmins < tmaxs);
 
-    tmins += m_stepsize;
-    samples += steps;
+    for (simd::float_m mask = tmins < tmaxs; !mask.isEmpty(); mask &= tmins < tmaxs) {
+      simd::float_v next_steps = Vc::min(stepsize, tmaxs - tmins);
 
-    for (simd::float_m mask = tmins <= tmaxs; !mask.isEmpty(); mask &= tmins <= tmaxs) {
+      tmins += next_steps;
+
+      samples += directions * next_steps;
+
       simd::float_v values = volume.samples(samples.x, samples.y, samples.z, mask);
 
       simd::float_v a = m_transfer_a(values, prev_values, mask);
@@ -99,7 +100,7 @@ public:
         simd::float_v g = m_transfer_g(values, prev_values, mask & alpha_mask);
         simd::float_v b = m_transfer_b(values, prev_values, mask & alpha_mask);
 
-        simd::float_v alpha = simd::float_v(1.f) - Vc::exp(-a * Vc::min(m_stepsize, tmaxs - tmins));
+        simd::float_v alpha = simd::float_v(1.f) - Vc::exp(-a * Vc::min(stepsize, tmaxs - tmins));
 
         simd::float_v coef = alpha * dsts.a;
 
@@ -112,19 +113,85 @@ public:
       }
 
       prev_values = values;
-
-      tmins += m_stepsize;
-      samples += steps;
     }
 
     return dsts;
   }
 
-private:
-  static constexpr float m_stepsize = 0.005f;
+  glm::vec4 integrate2(const BlockedVolume<T> &volume, const glm::vec3 &origin, const glm::vec3 &direction, float stepsize) const {
 
-  PreintegratedTransferFunction<uint8_t> m_transfer_r;
-  PreintegratedTransferFunction<uint8_t> m_transfer_g;
-  PreintegratedTransferFunction<uint8_t> m_transfer_b;
-  PreintegratedTransferFunction<uint8_t> m_transfer_a;
+    glm::vec4 dst(0.f, 0.f, 0.f, 1.f);
+
+    const glm::vec3 size = {volume.info.width, volume.info.height, volume.info.depth};
+    const glm::vec3 size_in_blocks = {volume.info.width_in_blocks, volume.info.height_in_blocks, volume.info.depth_in_blocks};
+
+    raster_traversal<BlockedVolume<T>::SUBVOLUME_SIDE>(origin, direction, size, size_in_blocks, [&](const glm::vec<3, uint32_t> &block_pos, const glm::vec3 &in_block_pos, float tmax) {
+
+      typename BlockedVolume<T>::Node node = volume.node(block_pos.x, block_pos.y, block_pos.z);
+
+      if (node.min == node.max) { // fast integration
+        float a = m_transfer_a(node.min, node.max);
+
+        if (a > 0.f) { // empty space skipping
+          float r = m_transfer_r(node.min, node.max);
+          float g = m_transfer_g(node.min, node.max);
+          float b = m_transfer_b(node.min, node.max);
+
+          float alpha = 1.f - std::exp(-a * tmax);
+
+          float coef = alpha * dst.a;
+
+          dst.r += r * coef;
+          dst.g += g * coef;
+          dst.b += b * coef;
+          dst.a *= 1 - alpha;
+        }
+      }
+      else { // integration by sampling
+        float prev_value = volume.sample_block(node.block_handle, in_block_pos.x, in_block_pos.y, in_block_pos.z);
+
+        float tmin = 0.f;
+
+        while (tmin < tmax) {
+          float next_step = std::min(stepsize, tmax - tmin);
+
+          tmin += next_step;
+
+          glm::vec3 current_pos = in_block_pos + direction * tmin;
+
+          float value = volume.sample_block(node.block_handle, current_pos.x, current_pos.y, current_pos.z);
+
+          float a = m_transfer_a(value, prev_value);
+
+          if (a > 0.f) { // empty sample skipping
+            float r = m_transfer_r(value, prev_value);
+            float g = m_transfer_g(value, prev_value);
+            float b = m_transfer_b(value, prev_value);
+
+            float alpha = 1.f - std::exp(-a * next_step);
+
+            float coef = alpha * dst.a;
+
+            dst.r += r * coef;
+            dst.g += g * coef;
+            dst.b += b * coef;
+            dst.a *= 1 - alpha;
+          }
+
+          prev_value = value;
+        }
+      }
+
+      return dst.a > 1.f / 256.f;
+    });
+
+    return dst;
+  }
+private:
+  static constexpr float stepsize = 0.005f;
+
+  PreintegratedTransferFunction<T> m_transfer_r;
+  PreintegratedTransferFunction<T> m_transfer_g;
+  PreintegratedTransferFunction<T> m_transfer_b;
+  PreintegratedTransferFunction<T> m_transfer_a;
 };

@@ -28,6 +28,10 @@ public:
     open(filename, offset, size, protection_bits, visibility);
   }
 
+  MappedFile(const MappedFile&) = delete;
+
+  operator =(const MappedFile&) = delete;
+
   ~MappedFile() {
     close();
   }
@@ -44,10 +48,10 @@ public:
     if (int fd = ::open(filename, openmode(protection_bits)); fd > 0) {
 
       auto protection = [](ProtectionBits protection_bits) {
-        if (protection_bits == READ) { return PROT_READ; }
-        if (protection_bits == WRITE) { return PROT_WRITE; }
-        if (protection_bits == (READ | WRITE)) { return PROT_READ | PROT_WRITE; }
-        return 0;
+        int prot = 0;
+        if (protection_bits & READ)  { prot |= PROT_READ; }
+        if (protection_bits & WRITE) { prot |= PROT_WRITE; }
+        return prot;
       };
 
       auto flags = [](Visibility visibility) {
