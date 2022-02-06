@@ -30,7 +30,7 @@ public:
 
   MappedFile(const MappedFile&) = delete;
 
-  operator =(const MappedFile&) = delete;
+  MappedFile &operator =(const MappedFile&) = delete;
 
   ~MappedFile() {
     close();
