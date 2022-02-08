@@ -28,22 +28,19 @@ public:
 
     glm::vec4 dst(0.f, 0.f, 0.f, 1.f);
 
-    glm::vec3 sample = origin + direction * tmin - .5f;
-
     float prev_value {};
 
     if (tmin < tmax) {
-      prev_value = volume.sample(sample.x, sample.y, sample.z);
+      glm::vec3 sample = origin + direction * tmin - .5f;
+      prev_value = volume.sample_volume(sample.x, sample.y, sample.z);
     }
 
+    tmin += stepsize;
+
     while (tmin < tmax) {
-      float next_step = std::min(stepsize, tmax - tmin);
+      glm::vec3 sample = origin + direction * tmin - .5f;
 
-      tmin += next_step;
-
-      sample += direction * next_step;
-
-      float value = volume.sample(sample.x, sample.y, sample.z);
+      float value = volume.sample_volume(sample.x, sample.y, sample.z);
 
       float a = m_transfer_a(value, prev_value);
 
@@ -52,7 +49,7 @@ public:
         float g = m_transfer_g(value, prev_value);
         float b = m_transfer_b(value, prev_value);
 
-        float alpha = 1.f - std::exp(-a * next_step);
+        float alpha = 1.f - std::exp(-a * stepsize);
 
         float coef = alpha * dst.a;
 
@@ -67,6 +64,7 @@ public:
       }
 
       prev_value = value;
+      tmin += stepsize;
     }
 
     return dst;
@@ -78,18 +76,22 @@ public:
 
     glm::vec<4, simd::float_v> dsts(0.f, 0.f, 0.f, 1.f);
 
-    glm::vec<3, simd::float_v> samples = glm::vec<3, simd::float_v>(origin) + directions * tmins - simd::float_v(.5f);
+    simd::float_v prev_values {};
 
-    simd::float_v prev_values = volume.samples(samples.x, samples.y, samples.z, tmins < tmaxs);
+    simd::float_m mask = tmins < tmaxs;
 
-    for (simd::float_m mask = tmins < tmaxs; !mask.isEmpty(); mask &= tmins < tmaxs) {
-      simd::float_v next_steps = Vc::min(stepsize, tmaxs - tmins);
+    if (!mask.isEmpty()) {
+      glm::vec<3, simd::float_v> samples = glm::vec<3, simd::float_v>(origin) + directions * tmins - simd::float_v(.5f);
+      prev_values = volume.sample_volume(samples.x, samples.y, samples.z, tmins < tmaxs);
+    }
 
-      tmins += next_steps;
+    tmins += stepsize;
+    mask &= tmins < tmaxs;
 
-      samples += directions * next_steps;
+    while (!mask.isEmpty()) {
+      glm::vec<3, simd::float_v> samples = glm::vec<3, simd::float_v>(origin) + directions * tmins - simd::float_v(.5f);
 
-      simd::float_v values = volume.samples(samples.x, samples.y, samples.z, mask);
+      simd::float_v values = volume.sample_volume(samples.x, samples.y, samples.z, mask);
 
       simd::float_v a = m_transfer_a(values, prev_values, mask);
 
@@ -100,7 +102,7 @@ public:
         simd::float_v g = m_transfer_g(values, prev_values, mask & alpha_mask);
         simd::float_v b = m_transfer_b(values, prev_values, mask & alpha_mask);
 
-        simd::float_v alpha = simd::float_v(1.f) - Vc::exp(-a * Vc::min(stepsize, tmaxs - tmins));
+        simd::float_v alpha = simd::float_v(1.f) - Vc::exp(-a * stepsize);
 
         simd::float_v coef = alpha * dsts.a;
 
@@ -113,6 +115,8 @@ public:
       }
 
       prev_values = values;
+      tmins += stepsize;
+      mask &= tmins < tmaxs;
     }
 
     return dsts;

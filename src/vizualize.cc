@@ -40,18 +40,28 @@ int main(int argc, char *argv[]) {
   }
 
   std::map<float, glm::vec3> color_map {
+    #if 0
     {80.f,  {0.75f, 0.5f, 0.25f}},
     {82.f,  {1.00f, 1.0f, 0.85f}}
+    #else
+    {0.f,  {1.00f, 0.0f, 0.0f}},
+    {89.f,  {0.00f, 1.0f, 0.0f}},
+    {178.f,  {0.00f, 0.0f, 1.0f}},
+    #endif
   };
 
   std::map<float, float> alpha_map {
+    #if 0
     {40.f,  000.f},
     {60.f,  001.f},
     {63.f,  005.f},
     {80.f,  000.f},
     {82.f,  100.f},
-    //{151.f,  0.0f},
-    //{152.f,  1.0f},
+    #else
+    {0.f,   0.f},
+    {89.f,  5.f},
+    {178.f, 0.f},
+    #endif
   };
 
   auto transfer_function = [&](float v) {
@@ -59,8 +69,6 @@ int main(int argc, char *argv[]) {
   };
 
   Integrator<uint8_t> integrator(transfer_function);
-
-  simd::uint32_v triplet_offsets = simd::uint32_v::IndexesFromZero() * 3;
 
   GLFW glfw(1920, 1080, "Volumetric Vizualizer");
 
@@ -72,7 +80,7 @@ int main(int argc, char *argv[]) {
   float yaw = -90;
   float pitch = 0;
 
-  glm::vec3 camera_pos   = glm::vec3(0.0f, 0.0f, 1.0f);
+  glm::vec3 camera_pos   = glm::vec3(0.0f, 0.0f, 2.0f);
   constexpr glm::vec3 camera_up = glm::vec3(0.0f, 1.0f, 0.0f);
 
   glm::vec3 volume_pos   = glm::vec3(0.0f, 0.0f, 0.0f);
@@ -104,7 +112,7 @@ int main(int argc, char *argv[]) {
       yaw   += offset.x;
       pitch -= offset.y;
 
-      pitch = std::clamp(pitch, std::nextafter(-90.f, 0.f), std::nextafter(90.f, 0.f));
+      pitch = std::clamp(pitch, -89.f, 89.f);
     }
 
     glm::vec3 camera_front = glm::normalize(glm::vec3{
@@ -192,16 +200,25 @@ int main(int argc, char *argv[]) {
         simd::float_v is = simd::float_v::IndexesFromZero() + i;
         simd::float_v xs = (2 * (is + 0.5f) / float(glfw.width()) - 1) * aspect * yFOV;
 
+        glm::vec<3, simd::float_v> directions {};
         for (uint32_t k = 0; k < simd::len; k++) {
           glm::vec3 direction = norm_model_view_inverse * glm::normalize(glm::vec4(xs[k], y, -1, 0)); // generate ray normalized in view space and transform to object space
+#if 0
+          glm::vec<4, simd::uint32_v> dsts = integrator.integrate(blocked_volume, ray_origin, direction, 0.005) * 255.f;
+#else
+          directions.x[k] = direction.x;
+          directions.y[k] = direction.y;
+          directions.z[k] = direction.z;
+        }
 
-          glm::vec<4, uint32_t> dsts = integrator.integrate2(blocked_volume, ray_origin, direction, 0.005) * 255.f;
-          //glm::vec<4, uint32_t> dsts = integrator.integrate(blocked_volume, ray_origin, direction, 0.005) * 255.f;
+        glm::vec<4, simd::uint32_v> dsts = integrator.integrate(blocked_volume, ray_origin, directions, 0.005) * simd::float_v(255.f);
 
+        for (uint32_t k = 0; k < simd::len; k++) {
+#endif
           uint8_t *triplet = glfw.raster(i, j) + k * 3;
-          triplet[0] = dsts.r;
-          triplet[1] = dsts.g;
-          triplet[2] = dsts.b;
+          triplet[0] = dsts.r[k];
+          triplet[1] = dsts.g[k];
+          triplet[2] = dsts.b[k];
         }
       }
     }

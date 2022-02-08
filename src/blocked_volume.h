@@ -53,40 +53,35 @@ public:
 
   using Block = LE<T>[BLOCK_SIZE];
 
-  struct Node {
-    T min, max;
-    uint64_t block_handle;
+  struct __attribute__ ((packed)) Node {
+    LE<uint64_t> block_handle;
+    LE<T> min, max;
   };
 
   BlockedVolume(const char *blocks_file_name, const char *metadata_file_name, uint64_t width, uint64_t height, uint64_t depth):
       info(width, height, depth) {
 
     m_data_file.open(blocks_file_name, 0, info.size_in_bytes, MappedFile::READ, MappedFile::SHARED);
+    m_metadata_file.open(metadata_file_name, 0, info.size_in_blocks * sizeof(Node), MappedFile::READ, MappedFile::SHARED);
 
-    if (!m_data_file) {
-      return;
-    }
-
-    m_metadata_file.open(metadata_file_name, 0, info.size_in_blocks * 2 + info.size_in_blocks * sizeof(uint64_t), MappedFile::READ, MappedFile::SHARED);
-
-    if (!m_metadata_file) {
+    if (!m_data_file || !m_metadata_file) {
       m_data_file.close();
+      m_metadata_file.close();
       return;
     }
 
-    m_blocks  = reinterpret_cast<const Block *>(m_data_file.data());
-    m_mins    = reinterpret_cast<const LE<T> *>(m_metadata_file.data());
-    m_maxs    = m_mins + info.size_in_blocks;
-    m_block_handles = reinterpret_cast<const LE<uint64_t> *>(m_maxs + info.size_in_blocks);
+    blocks  = reinterpret_cast<const Block *>(m_data_file.data());
+    nodes  = reinterpret_cast<const Node *>(m_metadata_file.data());
   }
 
   inline operator bool() const { return m_data_file && m_metadata_file; }
 
-  inline Node node(uint32_t x, uint32_t y, uint32_t z) const {
-    uint64_t i = z * info.stride_in_blocks + y * info.width_in_blocks + x;
-    return { m_mins[i], m_maxs[i], m_block_handles[i] };
+  inline uint64_t node_handle(uint32_t x, uint32_t y, uint32_t z) const {
+    return z * info.stride_in_blocks + y * info.width_in_blocks + x;
   }
 
+  // expects coordinates from interval <-.5f, volume_side - .5f>
+  // can safely handle values from interval (-1.f, volume_side) due to truncation used
   inline float sample_volume(float denorm_x, float denorm_y, float denorm_z) const {
     uint32_t vox_x = denorm_x;
     uint32_t vox_y = denorm_y;
@@ -96,7 +91,7 @@ public:
     uint32_t block_y = vox_y / SUBVOLUME_SIDE;
     uint32_t block_z = vox_z / SUBVOLUME_SIDE;
 
-    Node node = this->node(block_x, block_y, block_z);
+    const Node &node = nodes[node_handle(block_x, block_y, block_z)];
 
     if (node.min == node.max) {
       return node.min;
@@ -111,6 +106,8 @@ public:
     }
   };
 
+  // expects coordinates from interval <-.5f, volume_side - .5f>
+  // can safely handle values from interval (-1.f, volume_side) due to truncation used
   inline simd::float_v sample_volume(const simd::float_v &denorm_x, const simd::float_v &denorm_y, const simd::float_v &denorm_z, const simd::float_m &mask) const {
     simd::uint32_v vox_x = denorm_x;
     simd::uint32_v vox_y = denorm_y;
@@ -120,38 +117,35 @@ public:
     simd::uint32_v block_y = simd::fast_div<SUBVOLUME_SIDE>(vox_y);
     simd::uint32_v block_z = simd::fast_div<SUBVOLUME_SIDE>(vox_z);
 
-    simd::float_v samples;
-
     simd::uint32_v min, max;
     std::array<uint64_t, simd::len> block_handles;
 
     for (uint32_t k = 0; k < simd::len; k++) {
       if (mask[k]) {
-        Node node = node(block_x[k], block_y[k], block_z[k]);
+        const Node &node = nodes[node_handle(block_x[k], block_y[k], block_z[k])];
         min[k] = node.min;
         max[k] = node.max;
         block_handles[k] = node.block_handle;
       }
     }
 
-    simd::float_m same = min == max;
-    simd::float_m different = !same;
+    simd::float_v samples = min;
 
-    if (!same.isEmpty()) {
-      samples(same) = min;
-    }
+    simd::float_m integrate = (min != max) & mask;
 
-    if (!different.isEmpty()) {
+    if (!integrate.isEmpty()) {
       simd::float_v in_block_x = denorm_x - block_x * SUBVOLUME_SIDE;
       simd::float_v in_block_y = denorm_y - block_y * SUBVOLUME_SIDE;
       simd::float_v in_block_z = denorm_z - block_z * SUBVOLUME_SIDE;
 
-      samples(different) = sample_block(block_handles, in_block_x, in_block_y, in_block_z, mask & different);
+      samples(integrate) = sample_block(block_handles, in_block_x, in_block_y, in_block_z, integrate);
     }
 
     return samples;
   }
 
+  // expects coordinates from interval <-.5f, BLOCK_SIDE - .5f>
+  // can safely handle values from interval (-1.f, BLOCK_SIDE) due to truncation used
   inline float sample_block(uint64_t block_handle, float denorm_x, float denorm_y, float denorm_z) const {
     uint32_t denorm_x_low = denorm_x;
     uint32_t denorm_y_low = denorm_y;
@@ -186,14 +180,14 @@ public:
 
     int32_t buffers[2][2][2];
 
-    buffers[0][0][0] = m_blocks[block_handle][morton_indices[0][0][0]];
-    buffers[0][0][1] = m_blocks[block_handle][morton_indices[0][0][1]];
-    buffers[0][1][0] = m_blocks[block_handle][morton_indices[0][1][0]];
-    buffers[0][1][1] = m_blocks[block_handle][morton_indices[0][1][1]];
-    buffers[1][0][0] = m_blocks[block_handle][morton_indices[1][0][0]];
-    buffers[1][0][1] = m_blocks[block_handle][morton_indices[1][0][1]];
-    buffers[1][1][0] = m_blocks[block_handle][morton_indices[1][1][0]];
-    buffers[1][1][1] = m_blocks[block_handle][morton_indices[1][1][1]];
+    buffers[0][0][0] = blocks[block_handle][morton_indices[0][0][0]];
+    buffers[0][0][1] = blocks[block_handle][morton_indices[0][0][1]];
+    buffers[0][1][0] = blocks[block_handle][morton_indices[0][1][0]];
+    buffers[0][1][1] = blocks[block_handle][morton_indices[0][1][1]];
+    buffers[1][0][0] = blocks[block_handle][morton_indices[1][0][0]];
+    buffers[1][0][1] = blocks[block_handle][morton_indices[1][0][1]];
+    buffers[1][1][0] = blocks[block_handle][morton_indices[1][1][0]];
+    buffers[1][1][1] = blocks[block_handle][morton_indices[1][1][1]];
 
     float accs[2][2];
 
@@ -210,7 +204,9 @@ public:
     return accs[0][0];
   }
 
-  inline simd::float_v sample_block(const std::array<uint64_t, simd::len> &block_handle, const simd::float_v &denorm_x, const float &denorm_y, const float &denorm_z, const simd::float_m &mask) const {
+  // expects coordinates from interval <-.5f, BLOCK_SIDE - .5f>
+  // can safely handle values from interval (-1.f, BLOCK_SIDE) due to truncation used
+  inline simd::float_v sample_block(const std::array<uint64_t, simd::len> &block_handle, const simd::float_v &denorm_x, const simd::float_v &denorm_y, const simd::float_v &denorm_z, const simd::float_m &mask) const {
     simd::uint32_v denorm_x_low = denorm_x;
     simd::uint32_v denorm_y_low = denorm_y;
     simd::uint32_v denorm_z_low = denorm_z;
@@ -246,14 +242,14 @@ public:
 
     for (uint32_t k = 0; k < simd::len; k++) {
       if (mask[k]) {
-        buffers[0][0][0][k] = m_blocks[block_handle[k]][morton_indices[0][0][0][k]];
-        buffers[0][0][1][k] = m_blocks[block_handle[k]][morton_indices[0][0][1][k]];
-        buffers[0][1][0][k] = m_blocks[block_handle[k]][morton_indices[0][1][0][k]];
-        buffers[0][1][1][k] = m_blocks[block_handle[k]][morton_indices[0][1][1][k]];
-        buffers[1][0][0][k] = m_blocks[block_handle[k]][morton_indices[1][0][0][k]];
-        buffers[1][0][1][k] = m_blocks[block_handle[k]][morton_indices[1][0][1][k]];
-        buffers[1][1][0][k] = m_blocks[block_handle[k]][morton_indices[1][1][0][k]];
-        buffers[1][1][1][k] = m_blocks[block_handle[k]][morton_indices[1][1][1][k]];
+        buffers[0][0][0][k] = blocks[block_handle[k]][morton_indices[0][0][0][k]];
+        buffers[0][0][1][k] = blocks[block_handle[k]][morton_indices[0][0][1][k]];
+        buffers[0][1][0][k] = blocks[block_handle[k]][morton_indices[0][1][0][k]];
+        buffers[0][1][1][k] = blocks[block_handle[k]][morton_indices[0][1][1][k]];
+        buffers[1][0][0][k] = blocks[block_handle[k]][morton_indices[1][0][0][k]];
+        buffers[1][0][1][k] = blocks[block_handle[k]][morton_indices[1][0][1][k]];
+        buffers[1][1][0][k] = blocks[block_handle[k]][morton_indices[1][1][0][k]];
+        buffers[1][1][1][k] = blocks[block_handle[k]][morton_indices[1][1][1][k]];
       }
     }
 
@@ -274,13 +270,10 @@ public:
 
 public:
   const Info info;
+  const Block *blocks;
+  const Node *nodes;
 
 private:
   MappedFile m_data_file;
   MappedFile m_metadata_file;
-
-  const Block *m_blocks;
-  const LE<T> *m_mins;
-  const LE<T> *m_maxs;
-  const LE<uint64_t> *m_block_handles;
 };

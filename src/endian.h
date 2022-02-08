@@ -5,7 +5,7 @@
 #include <bit>
 
 template <typename T, std::endian E>
-class Endian {
+class __attribute__ ((packed)) Endian {
 public:
   inline Endian(): m_data(convert(T{})) {}
   inline Endian(const T& other): m_data(convert(other)) {}
