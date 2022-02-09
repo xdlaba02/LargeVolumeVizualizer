@@ -68,7 +68,7 @@ int main(int argc, char *argv[]) {
     return glm::vec4(linear_gradient(color_map, v), linear_gradient(alpha_map, v));
   };
 
-  Integrator<uint8_t> integrator(transfer_function);
+  Integrator<uint8_t> integrator(transfer_function, 0.005);
 
   GLFW glfw(1920, 1080, "Volumetric Vizualizer");
 
@@ -203,15 +203,15 @@ int main(int argc, char *argv[]) {
         glm::vec<3, simd::float_v> directions {};
         for (uint32_t k = 0; k < simd::len; k++) {
           glm::vec3 direction = norm_model_view_inverse * glm::normalize(glm::vec4(xs[k], y, -1, 0)); // generate ray normalized in view space and transform to object space
-#if 0
-          glm::vec<4, simd::uint32_v> dsts = integrator.integrate(blocked_volume, ray_origin, direction, 0.005) * 255.f;
+#if 1
+          glm::vec<4, simd::uint32_v> dsts = integrator.integrate2(blocked_volume, ray_origin, direction) * 255.f;
 #else
           directions.x[k] = direction.x;
           directions.y[k] = direction.y;
           directions.z[k] = direction.z;
         }
 
-        glm::vec<4, simd::uint32_v> dsts = integrator.integrate(blocked_volume, ray_origin, directions, 0.005) * simd::float_v(255.f);
+        glm::vec<4, simd::uint32_v> dsts = integrator.integrate(blocked_volume, ray_origin, directions) * simd::float_v(255.f);
 
         for (uint32_t k = 0; k < simd::len; k++) {
 #endif

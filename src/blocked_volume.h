@@ -26,29 +26,59 @@ public:
   static constexpr uint32_t SUBVOLUME_SIZE = SUBVOLUME_SIDE * SUBVOLUME_SIDE * SUBVOLUME_SIDE;
 
   struct Info {
-    Info(uint64_t width, uint64_t height, uint64_t depth):
-      width(width),
-      height(height),
-      depth(depth),
-      width_in_blocks((width  + SUBVOLUME_SIDE - 1) / SUBVOLUME_SIDE),
-      height_in_blocks((height + SUBVOLUME_SIDE - 1) / SUBVOLUME_SIDE),
-      depth_in_blocks((depth  + SUBVOLUME_SIDE - 1) / SUBVOLUME_SIDE),
-      stride_in_blocks(width_in_blocks * height_in_blocks),
-      size_in_blocks(stride_in_blocks * depth_in_blocks),
-      size_in_bytes(size_in_blocks * BLOCK_BYTES) {}
+    struct Layer {
+      Layer(uint32_t width, uint32_t height, uint32_t depth):
+        width(width),
+        height(height),
+        depth(depth),
+        width_in_blocks((width  + SUBVOLUME_SIDE - 1) / SUBVOLUME_SIDE),
+        height_in_blocks((height + SUBVOLUME_SIDE - 1) / SUBVOLUME_SIDE),
+        depth_in_blocks((depth  + SUBVOLUME_SIDE - 1) / SUBVOLUME_SIDE),
+        stride_in_blocks(width_in_blocks * height_in_blocks),
+        size_in_blocks(stride_in_blocks * depth_in_blocks) {}
 
-    const uint32_t width;
-    const uint32_t height;
-    const uint32_t depth;
+      uint32_t width;
+      uint32_t height;
+      uint32_t depth;
 
-    const uint32_t width_in_blocks;
-    const uint32_t height_in_blocks;
-    const uint32_t depth_in_blocks;
+      uint32_t width_in_blocks;
+      uint32_t height_in_blocks;
+      uint32_t depth_in_blocks;
 
-    const uint64_t stride_in_blocks;
-    const uint64_t size_in_blocks;
+      uint64_t stride_in_blocks;
+      uint64_t size_in_blocks;
 
-    const uint64_t size_in_bytes;
+      inline uint64_t node_handle(uint32_t x, uint32_t y, uint32_t z) const {
+        return z * stride_in_blocks + y * width_in_blocks + x;
+      }
+    };
+
+    Info(uint32_t width, uint32_t height, uint32_t depth)
+    {
+        size_in_blocks = 0;
+
+        while (width > SUBVOLUME_SIDE || height > SUBVOLUME_SIDE || depth > SUBVOLUME_SIDE) {
+          layers.emplace_back(width, height, depth);
+          layer_offsets.push_back(size_in_blocks);
+          size_in_blocks += layers.back().size_in_blocks;
+
+          ++width  >>= 1;
+          ++height >>= 1;
+          ++depth  >>= 1;
+        }
+
+        layers.emplace_back(width, height, depth);
+        layer_offsets.push_back(size_in_blocks);
+        size_in_blocks += layers.back().size_in_blocks;
+    }
+
+    inline uint64_t node_handle(uint32_t x, uint32_t y, uint32_t z, uint8_t layer) const {
+      return layer_offsets[layer] + layers[layer].node_handle(x, y, z);
+    }
+
+    std::vector<Layer> layers;
+    std::vector<uint64_t> layer_offsets;
+    uint64_t size_in_blocks;
   };
 
   using Block = LE<T>[BLOCK_SIZE];
@@ -61,7 +91,7 @@ public:
   BlockedVolume(const char *blocks_file_name, const char *metadata_file_name, uint64_t width, uint64_t height, uint64_t depth):
       info(width, height, depth) {
 
-    m_data_file.open(blocks_file_name, 0, info.size_in_bytes, MappedFile::READ, MappedFile::SHARED);
+    m_data_file.open(blocks_file_name, 0, info.size_in_blocks * BLOCK_BYTES, MappedFile::READ, MappedFile::SHARED);
     m_metadata_file.open(metadata_file_name, 0, info.size_in_blocks * sizeof(Node), MappedFile::READ, MappedFile::SHARED);
 
     if (!m_data_file || !m_metadata_file) {
@@ -76,10 +106,6 @@ public:
 
   inline operator bool() const { return m_data_file && m_metadata_file; }
 
-  inline uint64_t node_handle(uint32_t x, uint32_t y, uint32_t z) const {
-    return z * info.stride_in_blocks + y * info.width_in_blocks + x;
-  }
-
   // expects coordinates from interval <-.5f, volume_side - .5f>
   // can safely handle values from interval (-1.f, volume_side) due to truncation used
   inline float sample_volume(float denorm_x, float denorm_y, float denorm_z) const {
@@ -91,7 +117,7 @@ public:
     uint32_t block_y = vox_y / SUBVOLUME_SIDE;
     uint32_t block_z = vox_z / SUBVOLUME_SIDE;
 
-    const Node &node = nodes[node_handle(block_x, block_y, block_z)];
+    const Node &node = nodes[info.node_handle(block_x, block_y, block_z, 0)];
 
     if (node.min == node.max) {
       return node.min;
@@ -122,7 +148,7 @@ public:
 
     for (uint32_t k = 0; k < simd::len; k++) {
       if (mask[k]) {
-        const Node &node = nodes[node_handle(block_x[k], block_y[k], block_z[k])];
+        const Node &node = nodes[info.node_handle(block_x[k], block_y[k], block_z[k], 0)];
         min[k] = node.min;
         max[k] = node.max;
         block_handles[k] = node.block_handle;

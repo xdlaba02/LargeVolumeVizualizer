@@ -38,34 +38,6 @@ int main(int argc, char *argv[]) {
 
   BlockedVolume<uint8_t>::Info info(width, height, depth);
 
-  std::vector<uint64_t> layer_sizes {};
-
-  {
-      uint32_t layer_width  = info.width_in_blocks;
-      uint32_t layer_height = info.height_in_blocks;
-      uint32_t layer_depth  = info.depth_in_blocks;
-
-      while (layer_width > 1 || layer_height > 1 || layer_depth > 1) {
-
-        layer_sizes.push_back(layer_width * layer_height * layer_depth);
-
-        ++layer_width  >>= 1;
-        ++layer_height >>= 1;
-        ++layer_depth  >>= 1;
-      }
-
-      layer_sizes.push_back(layer_width * layer_height * layer_depth);
-  }
-
-  std::vector<uint64_t> layer_offsets {};
-
-  uint64_t pyramid_size_in_blocks = 0;
-
-  for (uint64_t layer_size: layer_sizes) {
-    layer_offsets.push_back(pyramid_size_in_blocks);
-    pyramid_size_in_blocks += layer_size;
-  }
-
   {
     std::ofstream metadata(argv[6], std::ios::binary);
     if (!metadata) {
@@ -73,11 +45,11 @@ int main(int argc, char *argv[]) {
       return 1;
     }
 
-    metadata.seekp(pyramid_size_in_blocks * sizeof(BlockedVolume<uint8_t>::Node) - 1);
+    metadata.seekp(info.size_in_blocks * sizeof(BlockedVolume<uint8_t>::Node) - 1);
     metadata.write("", 1);
   }
 
-  MappedFile metadata(argv[6], 0, pyramid_size_in_blocks * sizeof(BlockedVolume<uint8_t>::Node), MappedFile::WRITE, MappedFile::SHARED);
+  MappedFile metadata(argv[6], 0, info.size_in_blocks * sizeof(BlockedVolume<uint8_t>::Node), MappedFile::WRITE, MappedFile::SHARED);
   if (!metadata) {
     std::cerr << "failed mapping the metadata file\n";
     return 1;
@@ -91,11 +63,10 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  uint8_t layer = 0;
 
-  uint64_t layer_width  = info.width_in_blocks;
-  uint64_t layer_height = info.height_in_blocks;
-  uint64_t layer_depth  = info.depth_in_blocks;
+  uint64_t layer_width  = info.layers[0].width_in_blocks;
+  uint64_t layer_height = info.layers[0].height_in_blocks;
+  uint64_t layer_depth  = info.layers[0].depth_in_blocks;
 
   uint64_t block_handle = 0;
 
@@ -103,9 +74,7 @@ int main(int argc, char *argv[]) {
     for (uint32_t block_y = 0; block_y < layer_height; block_y++) {
       for (uint32_t block_x = 0; block_x < layer_width; block_x++) {
 
-        uint64_t node_index = block_z * layer_width * layer_height + block_y * layer_width + block_x;
-
-        BlockedVolume<uint8_t>::Node &node = nodes[layer_offsets[layer] + node_index];
+        BlockedVolume<uint8_t>::Node &node = nodes[info.node_handle(block_x, block_y, block_z, 0)];
 
         node.block_handle = 0;
         node.min    = 255;
@@ -135,12 +104,10 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  layer++;
-
-  while (layer < std::size(layer_offsets)) {
-    uint64_t next_layer_width  = (layer_width  + 1) >> 1;
-    uint64_t next_layer_height = (layer_height + 1) >> 1;
-    uint64_t next_layer_depth  = (layer_depth  + 1) >> 1;
+  for (uint8_t layer = 1; layer < std::size(info.layers); layer++) {
+    uint64_t next_layer_width  = info.layers[layer].width_in_blocks;
+    uint64_t next_layer_height = info.layers[layer].height_in_blocks;
+    uint64_t next_layer_depth  = info.layers[layer].depth_in_blocks;
 
     blocked_volume.flush();
 
@@ -159,7 +126,7 @@ int main(int argc, char *argv[]) {
 
           uint64_t node_index = block_z * next_layer_width * next_layer_height + block_y * next_layer_width + block_x;
 
-          BlockedVolume<uint8_t>::Node &node = nodes[layer_offsets[layer] + node_index];
+          BlockedVolume<uint8_t>::Node &node = nodes[info.layer_offsets[layer] + node_index];
 
           node.block_handle = 0;
           node.min    = 255;
@@ -175,7 +142,7 @@ int main(int argc, char *argv[]) {
 
                 uint64_t source_node_index = source_z * layer_width * layer_height + source_y * layer_width + source_x;
 
-                const BlockedVolume<uint8_t>::Node &source_node = nodes[layer_offsets[layer - 1] + source_node_index];
+                const BlockedVolume<uint8_t>::Node &source_node = nodes[info.layer_offsets[layer - 1] + source_node_index];
 
                 if (source_node.min != source_node.max) {
                   const BlockedVolume<uint8_t>::Block &source_block = blocks[source_node.block_handle];
@@ -213,7 +180,5 @@ int main(int argc, char *argv[]) {
     layer_width  = next_layer_width;
     layer_height = next_layer_height;
     layer_depth  = next_layer_depth;
-
-    layer++;
   }
 }
