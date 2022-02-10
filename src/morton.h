@@ -14,7 +14,7 @@ namespace morton {
 
   template <typename T>
   inline constexpr T to_index_4b_3d(T x, T y, T z) {
-    return morton_combine_interleaved(interleave_4b_3d(x), interleave_4b_3d(y), interleave_4b_3d(z));
+    return combine_interleaved(interleave_4b_3d(x), interleave_4b_3d(y), interleave_4b_3d(z));
   }
 
   template <typename T>

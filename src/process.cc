@@ -63,16 +63,11 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-
-  uint64_t layer_width  = info.layers[0].width_in_blocks;
-  uint64_t layer_height = info.layers[0].height_in_blocks;
-  uint64_t layer_depth  = info.layers[0].depth_in_blocks;
-
   uint64_t block_handle = 0;
 
-  for (uint32_t block_z = 0; block_z < layer_depth; block_z++) {
-    for (uint32_t block_y = 0; block_y < layer_height; block_y++) {
-      for (uint32_t block_x = 0; block_x < layer_width; block_x++) {
+  for (uint32_t block_z = 0; block_z < info.layers[0].depth_in_blocks; block_z++) {
+    for (uint32_t block_y = 0; block_y < info.layers[0].height_in_blocks; block_y++) {
+      for (uint32_t block_x = 0; block_x < info.layers[0].width_in_blocks; block_x++) {
 
         BlockedVolume<uint8_t>::Node &node = nodes[info.node_handle(block_x, block_y, block_z, 0)];
 
@@ -105,10 +100,6 @@ int main(int argc, char *argv[]) {
   }
 
   for (uint8_t layer = 1; layer < std::size(info.layers); layer++) {
-    uint64_t next_layer_width  = info.layers[layer].width_in_blocks;
-    uint64_t next_layer_height = info.layers[layer].height_in_blocks;
-    uint64_t next_layer_depth  = info.layers[layer].depth_in_blocks;
-
     blocked_volume.flush();
 
     MappedFile blocks_file(argv[5], 0, blocked_volume.tellp(), MappedFile::READ, MappedFile::SHARED);
@@ -120,13 +111,11 @@ int main(int argc, char *argv[]) {
 
     const BlockedVolume<uint8_t>::Block *blocks = reinterpret_cast<const BlockedVolume<uint8_t>::Block *>(blocks_file.data());
 
-    for (uint32_t block_z = 0; block_z < next_layer_depth; block_z++) {
-      for (uint32_t block_y = 0; block_y < next_layer_height; block_y++) {
-        for (uint32_t block_x = 0; block_x < next_layer_width; block_x++) {
+    for (uint32_t block_z = 0; block_z < info.layers[layer].depth_in_blocks; block_z++) {
+      for (uint32_t block_y = 0; block_y < info.layers[layer].height_in_blocks; block_y++) {
+        for (uint32_t block_x = 0; block_x < info.layers[layer].width_in_blocks; block_x++) {
 
-          uint64_t node_index = block_z * next_layer_width * next_layer_height + block_y * next_layer_width + block_x;
-
-          BlockedVolume<uint8_t>::Node &node = nodes[info.layer_offsets[layer] + node_index];
+          BlockedVolume<uint8_t>::Node &node = nodes[info.node_handle(block_x, block_y, block_z, layer)];
 
           node.block_handle = 0;
           node.min    = 255;
@@ -134,37 +123,62 @@ int main(int argc, char *argv[]) {
 
           BlockedVolume<uint8_t>::Block block {};
 
-          uint32_t voxel_index = 0;
+          for (uint32_t in_block_z = 0; in_block_z < BlockedVolume<uint8_t>::BLOCK_SIDE; in_block_z++) {
+            for (uint32_t in_block_y = 0; in_block_y < BlockedVolume<uint8_t>::BLOCK_SIDE; in_block_y++) {
+              for (uint32_t in_block_x = 0; in_block_x < BlockedVolume<uint8_t>::BLOCK_SIDE; in_block_x++) {
 
-          for (uint32_t source_z = block_z << 1; source_z < std::min<uint32_t>((block_z << 1) + 1, layer_depth); source_z++) {
-            for (uint32_t source_y = block_y << 1; source_y < std::min<uint32_t>((block_y << 1) + 1, layer_height); source_y++) {
-              for (uint32_t source_x = block_x << 1; source_x < std::min<uint32_t>((block_x << 1) + 1, layer_width); source_x++) {
+                uint32_t voxel_x = block_x * BlockedVolume<uint8_t>::SUBVOLUME_SIDE + in_block_x;
+                uint32_t voxel_y = block_y * BlockedVolume<uint8_t>::SUBVOLUME_SIDE + in_block_y;
+                uint32_t voxel_z = block_z * BlockedVolume<uint8_t>::SUBVOLUME_SIDE + in_block_z;
 
-                uint64_t source_node_index = source_z * layer_width * layer_height + source_y * layer_width + source_x;
+                uint32_t value = 0;
 
-                const BlockedVolume<uint8_t>::Node &source_node = nodes[info.layer_offsets[layer - 1] + source_node_index];
+                for (uint32_t z = 0; z < 2; z++) {
+                  for (uint32_t y = 0; y < 2; y++) {
+                    for (uint32_t x = 0; x < 2; x++) {
 
-                if (source_node.min != source_node.max) {
-                  const BlockedVolume<uint8_t>::Block &source_block = blocks[source_node.block_handle];
+                      uint32_t original_x = (voxel_x << 1) + x;
+                      uint32_t original_y = (voxel_y << 1) + y;
+                      uint32_t original_z = (voxel_z << 1) + z;
 
-                  for (uint32_t i = 0; i < BlockedVolume<uint8_t>::BLOCK_SIZE >> 3; i++) {
-                    uint32_t value {};
+                      uint32_t original_block_x = std::min(original_x / BlockedVolume<uint8_t>::SUBVOLUME_SIDE, info.layers[layer - 1].width_in_blocks  - 1);
+                      uint32_t original_block_y = std::min(original_y / BlockedVolume<uint8_t>::SUBVOLUME_SIDE, info.layers[layer - 1].height_in_blocks - 1);
+                      uint32_t original_block_z = std::min(original_z / BlockedVolume<uint8_t>::SUBVOLUME_SIDE, info.layers[layer - 1].depth_in_blocks  - 1);
 
-                    for (uint8_t j = 0; j < 8; j++) {
-                      value += source_block[(i << 3) + j];
+                      BlockedVolume<uint8_t>::Node &original_node = nodes[info.node_handle(original_block_x, original_block_y, original_block_z, layer - 1)];
+
+                      if (original_node.min != original_node.max) {
+                        const BlockedVolume<uint8_t>::Block &original_block = blocks[original_node.block_handle];
+
+                        uint32_t original_in_block_x = std::min(original_x - original_block_x * BlockedVolume<uint8_t>::SUBVOLUME_SIDE, BlockedVolume<uint8_t>::SUBVOLUME_SIDE - 1);
+                        uint32_t original_in_block_y = std::min(original_y - original_block_y * BlockedVolume<uint8_t>::SUBVOLUME_SIDE, BlockedVolume<uint8_t>::SUBVOLUME_SIDE - 1);
+                        uint32_t original_in_block_z = std::min(original_z - original_block_z * BlockedVolume<uint8_t>::SUBVOLUME_SIDE, BlockedVolume<uint8_t>::SUBVOLUME_SIDE - 1);
+
+                        value += original_block[morton::to_index_4b_3d(original_in_block_x, original_in_block_y, original_in_block_z)];
+                      }
+                      else {
+                        value += original_node.min;
+                      }
                     }
-
-                    block[voxel_index++] = value >> 3;
-                  }
-                }
-                else {
-                  for (uint32_t i = 0; i < BlockedVolume<uint8_t>::BLOCK_SIZE >> 3; i++) {
-                    block[voxel_index++] = source_node.min;
                   }
                 }
 
-                node.min = std::min(node.min, source_node.min);
-                node.max = std::max(node.max, source_node.max);
+                block[morton::to_index_4b_3d(in_block_x, in_block_y, in_block_z)] = value >> 3;
+              }
+            }
+          }
+
+          for (uint8_t z = 0; z < 2; z++) {
+            for (uint8_t y = 0; y < 2; y++) {
+              for (uint8_t x = 0; x < 2; x++) {
+                uint32_t original_block_x = std::min(block_x * 2 + x, info.layers[layer - 1].width_in_blocks  - 1);
+                uint32_t original_block_y = std::min(block_y * 2 + y, info.layers[layer - 1].height_in_blocks - 1);
+                uint32_t original_block_z = std::min(block_z * 2 + z, info.layers[layer - 1].depth_in_blocks  - 1);
+
+                BlockedVolume<uint8_t>::Node &original_node = nodes[info.node_handle(original_block_x, original_block_y, original_block_z, layer - 1)];
+
+                node.min = std::min(node.min, original_node.min);
+                node.max = std::max(node.max, original_node.max);
               }
             }
           }
@@ -176,9 +190,5 @@ int main(int argc, char *argv[]) {
         }
       }
     }
-
-    layer_width  = next_layer_width;
-    layer_height = next_layer_height;
-    layer_depth  = next_layer_depth;
   }
 }

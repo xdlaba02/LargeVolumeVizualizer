@@ -23,25 +23,27 @@ public:
       m_transfer_a([&](float v){ return transfer(v).a; }),
       m_stepsize(stepsize) {}
 
-  glm::vec4 integrate(const BlockedVolume<T> &volume, const glm::vec3 &origin, const glm::vec3 &direction) const {
+  glm::vec4 integrate(const BlockedVolume<T> &volume, const glm::vec3 &origin, const glm::vec3 &direction, uint8_t layer) const {
     float tmin, tmax;
-    intersect_aabb_ray(origin, 1.f / direction, {0, 0, 0}, {volume.info.layers[0].width, volume.info.layers[0].height, volume.info.layers[0].depth}, tmin, tmax);
+    intersect_aabb_ray(origin, 1.f / direction, {0, 0, 0}, {1, 1, 1}, tmin, tmax);
+
+    float stepsize = m_stepsize * (layer + 1);
 
     glm::vec4 dst(0.f, 0.f, 0.f, 1.f);
 
     float prev_value {};
 
     if (tmin < tmax) {
-      glm::vec3 sample = origin + direction * tmin - .5f;
-      prev_value = volume.sample_volume(sample.x, sample.y, sample.z);
+      glm::vec3 sample = origin + direction * tmin;
+      prev_value = volume.sample_volume(sample.x, sample.y, sample.z, layer);
     }
 
-    tmin += m_stepsize;
+    tmin += stepsize;
 
     while (tmin < tmax) {
-      glm::vec3 sample = origin + direction * tmin - .5f;
+      glm::vec3 sample = origin + direction * tmin;
 
-      float value = volume.sample_volume(sample.x, sample.y, sample.z);
+      float value = volume.sample_volume(sample.x, sample.y, sample.z, layer);
 
       float a = m_transfer_a(value, prev_value);
 
@@ -50,7 +52,7 @@ public:
         float g = m_transfer_g(value, prev_value);
         float b = m_transfer_b(value, prev_value);
 
-        float alpha = 1.f - std::exp(-a * m_stepsize);
+        float alpha = 1.f - std::exp(-a * stepsize);
 
         float coef = alpha * dst.a;
 
@@ -65,15 +67,17 @@ public:
       }
 
       prev_value = value;
-      tmin += m_stepsize;
+      tmin += stepsize;
     }
 
     return dst;
   }
 
-  glm::vec<4, simd::float_v> integrate(const BlockedVolume<T> &volume, const glm::vec3 &origin, const glm::vec<3, simd::float_v> &directions) const {
+  glm::vec<4, simd::float_v> integrate(const BlockedVolume<T> &volume, const glm::vec3 &origin, const glm::vec<3, simd::float_v> &directions, const simd::uint32_v &layer) const {
     simd::float_v tmins, tmaxs;
-    intersect_aabb_rays_single_origin(origin, simd::float_v(1.f) / directions, {0, 0, 0}, {volume.info.layers[0].width, volume.info.layers[0].height, volume.info.layers[0].depth}, tmins, tmaxs);
+    intersect_aabb_rays_single_origin(origin, simd::float_v(1.f) / directions, {0, 0, 0}, {1, 1, 1}, tmins, tmaxs);
+
+    simd::float_v stepsize = m_stepsize * simd::float_v(layer + 1);
 
     glm::vec<4, simd::float_v> dsts(0.f, 0.f, 0.f, 1.f);
 
@@ -82,17 +86,17 @@ public:
     simd::float_m mask = tmins < tmaxs;
 
     if (!mask.isEmpty()) {
-      glm::vec<3, simd::float_v> samples = glm::vec<3, simd::float_v>(origin) + directions * tmins - simd::float_v(.5f);
-      prev_values = volume.sample_volume(samples.x, samples.y, samples.z, tmins < tmaxs);
+      glm::vec<3, simd::float_v> samples = glm::vec<3, simd::float_v>(origin) + directions * tmins;
+      prev_values = volume.sample_volume(samples.x, samples.y, samples.z, layer, tmins < tmaxs);
     }
 
-    tmins += m_stepsize;
+    tmins += stepsize;
     mask &= tmins < tmaxs;
 
     while (!mask.isEmpty()) {
-      glm::vec<3, simd::float_v> samples = glm::vec<3, simd::float_v>(origin) + directions * tmins - simd::float_v(.5f);
+      glm::vec<3, simd::float_v> samples = glm::vec<3, simd::float_v>(origin) + directions * tmins;
 
-      simd::float_v values = volume.sample_volume(samples.x, samples.y, samples.z, mask);
+      simd::float_v values = volume.sample_volume(samples.x, samples.y, samples.z, layer, mask);
 
       simd::float_v a = m_transfer_a(values, prev_values, mask);
 
@@ -103,7 +107,7 @@ public:
         simd::float_v g = m_transfer_g(values, prev_values, mask & alpha_mask);
         simd::float_v b = m_transfer_b(values, prev_values, mask & alpha_mask);
 
-        simd::float_v alpha = simd::float_v(1.f) - Vc::exp(-a * m_stepsize);
+        simd::float_v alpha = simd::float_v(1.f) - Vc::exp(-a * stepsize);
 
         simd::float_v coef = alpha * dsts.a;
 
@@ -116,7 +120,7 @@ public:
       }
 
       prev_values = values;
-      tmins += m_stepsize;
+      tmins += stepsize;
       mask &= tmins < tmaxs;
     }
 

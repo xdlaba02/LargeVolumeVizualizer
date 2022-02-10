@@ -32,9 +32,9 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  BlockedVolume<uint8_t> blocked_volume(processed_volume, processed_metadata, width, height, depth);
+  BlockedVolume<uint8_t> volume(processed_volume, processed_metadata, width, height, depth);
 
-  if (!blocked_volume) {
+  if (!volume) {
     std::cerr << "ERROR: Unable to open volume!\n";
     return 1;
   }
@@ -169,11 +169,10 @@ int main(int argc, char *argv[]) {
       }
     }
 
-    // object space - volume in 3D interval <0, volume_size>
+    // object space - volume in 3D interval <0, 1>
     // normalized object space - volume in 3D interval <-0.5, 0.5> - good for transformations because origin is at center of the volume.
 
-    glm::mat4 norm = glm::translate(glm::mat4(1.f), glm::vec3(-0.5f, -0.5f, -0.5f))
-                   * glm::scale(glm::mat4(1.f), glm::vec3(1.f / width, 1.f / height, 1.f / depth));
+    glm::mat4 norm = glm::translate(glm::mat4(1.f), glm::vec3(-0.5f, -0.5f, -0.5f));
 
     glm::mat4 norm_invese = glm::inverse(norm);
 
@@ -204,14 +203,14 @@ int main(int argc, char *argv[]) {
         for (uint32_t k = 0; k < simd::len; k++) {
           glm::vec3 direction = norm_model_view_inverse * glm::normalize(glm::vec4(xs[k], y, -1, 0)); // generate ray normalized in view space and transform to object space
 #if 1
-          glm::vec<4, simd::uint32_v> dsts = integrator.integrate2(blocked_volume, ray_origin, direction) * 255.f;
+          glm::vec<4, simd::uint32_v> dsts = integrator.integrate(volume, ray_origin, direction, int(t) % std::size(volume.info.layers)) * 255.f;
 #else
           directions.x[k] = direction.x;
           directions.y[k] = direction.y;
           directions.z[k] = direction.z;
         }
 
-        glm::vec<4, simd::uint32_v> dsts = integrator.integrate(blocked_volume, ray_origin, directions) * simd::float_v(255.f);
+        glm::vec<4, simd::uint32_v> dsts = integrator.integrate(volume, ray_origin, directions, simd::uint32_v(int(t) % std::size(volume.info.layers))) * simd::float_v(255.f);
 
         for (uint32_t k = 0; k < simd::len; k++) {
 #endif

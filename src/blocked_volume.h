@@ -106,9 +106,12 @@ public:
 
   inline operator bool() const { return m_data_file && m_metadata_file; }
 
-  // expects coordinates from interval <-.5f, volume_side - .5f>
-  // can safely handle values from interval (-1.f, volume_side) due to truncation used
-  inline float sample_volume(float denorm_x, float denorm_y, float denorm_z) const {
+  // expects coordinates from interval <0, 1>
+  inline float sample_volume(float x, float y, float z, uint8_t layer) const {
+    float denorm_x = x * info.layers[layer].width  - 0.5f;
+    float denorm_y = y * info.layers[layer].height - 0.5f;
+    float denorm_z = z * info.layers[layer].depth  - 0.5f;
+
     uint32_t vox_x = denorm_x;
     uint32_t vox_y = denorm_y;
     uint32_t vox_z = denorm_z;
@@ -117,7 +120,7 @@ public:
     uint32_t block_y = vox_y / SUBVOLUME_SIDE;
     uint32_t block_z = vox_z / SUBVOLUME_SIDE;
 
-    const Node &node = nodes[info.node_handle(block_x, block_y, block_z, 0)];
+    const Node &node = nodes[info.node_handle(block_x, block_y, block_z, layer)];
 
     if (node.min == node.max) {
       return node.min;
@@ -132,9 +135,24 @@ public:
     }
   };
 
-  // expects coordinates from interval <-.5f, volume_side - .5f>
-  // can safely handle values from interval (-1.f, volume_side) due to truncation used
-  inline simd::float_v sample_volume(const simd::float_v &denorm_x, const simd::float_v &denorm_y, const simd::float_v &denorm_z, const simd::float_m &mask) const {
+  // expects coordinates from interval <0, 1>
+  inline simd::float_v sample_volume(const simd::float_v &x, const simd::float_v &y, const simd::float_v &z, const simd::uint32_v &layer, const simd::float_m &mask) const {
+    simd::uint32_v width;
+    simd::uint32_v height;
+    simd::uint32_v depth;
+
+    for (uint32_t k = 0; k < simd::len; k++) {
+      if (mask[k]) {
+        width[k]  = info.layers[layer[k]].width;
+        height[k] = info.layers[layer[k]].height;
+        depth[k]  = info.layers[layer[k]].depth;
+      }
+    }
+
+    simd::float_v denorm_x = x * width  - 0.5f;
+    simd::float_v denorm_y = y * height - 0.5f;
+    simd::float_v denorm_z = z * depth  - 0.5f;
+
     simd::uint32_v vox_x = denorm_x;
     simd::uint32_v vox_y = denorm_y;
     simd::uint32_v vox_z = denorm_z;
@@ -148,7 +166,7 @@ public:
 
     for (uint32_t k = 0; k < simd::len; k++) {
       if (mask[k]) {
-        const Node &node = nodes[info.node_handle(block_x[k], block_y[k], block_z[k], 0)];
+        const Node &node = nodes[info.node_handle(block_x[k], block_y[k], block_z[k], layer[k])];
         min[k] = node.min;
         max[k] = node.max;
         block_handles[k] = node.block_handle;
@@ -230,8 +248,8 @@ public:
     return accs[0][0];
   }
 
-  // expects coordinates from interval <-.5f, BLOCK_SIDE - .5f>
-  // can safely handle values from interval (-1.f, BLOCK_SIDE) due to truncation used
+  // expects coordinates from interval <-.5f, SUBVOLUME_SIDE - .5f>
+  // can safely handle values from interval (-1.f, BLOCK_SIDE) due to padding and truncation used
   inline simd::float_v sample_block(const std::array<uint64_t, simd::len> &block_handle, const simd::float_v &denorm_x, const simd::float_v &denorm_y, const simd::float_v &denorm_z, const simd::float_m &mask) const {
     simd::uint32_v denorm_x_low = denorm_x;
     simd::uint32_v denorm_y_low = denorm_y;
