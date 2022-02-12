@@ -203,24 +203,24 @@ public:
     float frac_y = denorm_y - denorm_y_low;
     float frac_z = denorm_z - denorm_z_low;
 
-    uint32_t denorm_x_low_interleaved = morton::interleave_4b_3d(denorm_x_low);
-    uint32_t denorm_y_low_interleaved = morton::interleave_4b_3d(denorm_y_low);
-    uint32_t denorm_z_low_interleaved = morton::interleave_4b_3d(denorm_z_low);
+    uint32_t denorm_x_low_interleaved = Morton<BLOCK_BITS>::interleave(denorm_x_low);
+    uint32_t denorm_y_low_interleaved = Morton<BLOCK_BITS>::interleave(denorm_y_low);
+    uint32_t denorm_z_low_interleaved = Morton<BLOCK_BITS>::interleave(denorm_z_low);
 
-    uint32_t denorm_x_high_interleaved = morton::interleave_4b_3d(denorm_x_high);
-    uint32_t denorm_y_high_interleaved = morton::interleave_4b_3d(denorm_y_high);
-    uint32_t denorm_z_high_interleaved = morton::interleave_4b_3d(denorm_z_high);
+    uint32_t denorm_x_high_interleaved = Morton<BLOCK_BITS>::interleave(denorm_x_high);
+    uint32_t denorm_y_high_interleaved = Morton<BLOCK_BITS>::interleave(denorm_y_high);
+    uint32_t denorm_z_high_interleaved = Morton<BLOCK_BITS>::interleave(denorm_z_high);
 
     uint32_t morton_indices[2][2][2];
 
-    morton_indices[0][0][0] = morton::combine_interleaved(denorm_x_low_interleaved,  denorm_y_low_interleaved,  denorm_z_low_interleaved);
-    morton_indices[0][0][1] = morton::combine_interleaved(denorm_x_high_interleaved, denorm_y_low_interleaved,  denorm_z_low_interleaved);
-    morton_indices[0][1][0] = morton::combine_interleaved(denorm_x_low_interleaved,  denorm_y_high_interleaved, denorm_z_low_interleaved);
-    morton_indices[0][1][1] = morton::combine_interleaved(denorm_x_high_interleaved, denorm_y_high_interleaved, denorm_z_low_interleaved);
-    morton_indices[1][0][0] = morton::combine_interleaved(denorm_x_low_interleaved,  denorm_y_low_interleaved,  denorm_z_high_interleaved);
-    morton_indices[1][0][1] = morton::combine_interleaved(denorm_x_high_interleaved, denorm_y_low_interleaved,  denorm_z_high_interleaved);
-    morton_indices[1][1][0] = morton::combine_interleaved(denorm_x_low_interleaved,  denorm_y_high_interleaved, denorm_z_high_interleaved);
-    morton_indices[1][1][1] = morton::combine_interleaved(denorm_x_high_interleaved, denorm_y_high_interleaved, denorm_z_high_interleaved);
+    morton_indices[0][0][0] = Morton<BLOCK_BITS>::combine_interleaved(denorm_x_low_interleaved,  denorm_y_low_interleaved,  denorm_z_low_interleaved);
+    morton_indices[0][0][1] = Morton<BLOCK_BITS>::combine_interleaved(denorm_x_high_interleaved, denorm_y_low_interleaved,  denorm_z_low_interleaved);
+    morton_indices[0][1][0] = Morton<BLOCK_BITS>::combine_interleaved(denorm_x_low_interleaved,  denorm_y_high_interleaved, denorm_z_low_interleaved);
+    morton_indices[0][1][1] = Morton<BLOCK_BITS>::combine_interleaved(denorm_x_high_interleaved, denorm_y_high_interleaved, denorm_z_low_interleaved);
+    morton_indices[1][0][0] = Morton<BLOCK_BITS>::combine_interleaved(denorm_x_low_interleaved,  denorm_y_low_interleaved,  denorm_z_high_interleaved);
+    morton_indices[1][0][1] = Morton<BLOCK_BITS>::combine_interleaved(denorm_x_high_interleaved, denorm_y_low_interleaved,  denorm_z_high_interleaved);
+    morton_indices[1][1][0] = Morton<BLOCK_BITS>::combine_interleaved(denorm_x_low_interleaved,  denorm_y_high_interleaved, denorm_z_high_interleaved);
+    morton_indices[1][1][1] = Morton<BLOCK_BITS>::combine_interleaved(denorm_x_high_interleaved, denorm_y_high_interleaved, denorm_z_high_interleaved);
 
     int32_t buffers[2][2][2];
 
@@ -263,24 +263,24 @@ public:
     simd::float_v frac_y = denorm_y - denorm_y_low;
     simd::float_v frac_z = denorm_z - denorm_z_low;
 
-    simd::uint32_v denorm_x_low_interleaved = morton::interleave_4b_3d(denorm_x_low);
-    simd::uint32_v denorm_y_low_interleaved = morton::interleave_4b_3d(denorm_y_low);
-    simd::uint32_v denorm_z_low_interleaved = morton::interleave_4b_3d(denorm_z_low);
+    simd::uint32_v denorm_x_low_interleaved = Morton<BLOCK_BITS>::interleave(denorm_x_low);
+    simd::uint32_v denorm_y_low_interleaved = Morton<BLOCK_BITS>::interleave(denorm_y_low);
+    simd::uint32_v denorm_z_low_interleaved = Morton<BLOCK_BITS>::interleave(denorm_z_low);
 
-    simd::uint32_v denorm_x_high_interleaved = morton::interleave_4b_3d(denorm_x_high);
-    simd::uint32_v denorm_y_high_interleaved = morton::interleave_4b_3d(denorm_y_high);
-    simd::uint32_v denorm_z_high_interleaved = morton::interleave_4b_3d(denorm_z_high);
+    simd::uint32_v denorm_x_high_interleaved = Morton<BLOCK_BITS>::interleave(denorm_x_high);
+    simd::uint32_v denorm_y_high_interleaved = Morton<BLOCK_BITS>::interleave(denorm_y_high);
+    simd::uint32_v denorm_z_high_interleaved = Morton<BLOCK_BITS>::interleave(denorm_z_high);
 
     simd::uint32_v morton_indices[2][2][2];
 
-    morton_indices[0][0][0] = morton::combine_interleaved(denorm_x_low_interleaved,  denorm_y_low_interleaved,  denorm_z_low_interleaved);
-    morton_indices[0][0][1] = morton::combine_interleaved(denorm_x_high_interleaved, denorm_y_low_interleaved,  denorm_z_low_interleaved);
-    morton_indices[0][1][0] = morton::combine_interleaved(denorm_x_low_interleaved,  denorm_y_high_interleaved, denorm_z_low_interleaved);
-    morton_indices[0][1][1] = morton::combine_interleaved(denorm_x_high_interleaved, denorm_y_high_interleaved, denorm_z_low_interleaved);
-    morton_indices[1][0][0] = morton::combine_interleaved(denorm_x_low_interleaved,  denorm_y_low_interleaved,  denorm_z_high_interleaved);
-    morton_indices[1][0][1] = morton::combine_interleaved(denorm_x_high_interleaved, denorm_y_low_interleaved,  denorm_z_high_interleaved);
-    morton_indices[1][1][0] = morton::combine_interleaved(denorm_x_low_interleaved,  denorm_y_high_interleaved, denorm_z_high_interleaved);
-    morton_indices[1][1][1] = morton::combine_interleaved(denorm_x_high_interleaved, denorm_y_high_interleaved, denorm_z_high_interleaved);
+    morton_indices[0][0][0] = Morton<BLOCK_BITS>::combine_interleaved(denorm_x_low_interleaved,  denorm_y_low_interleaved,  denorm_z_low_interleaved);
+    morton_indices[0][0][1] = Morton<BLOCK_BITS>::combine_interleaved(denorm_x_high_interleaved, denorm_y_low_interleaved,  denorm_z_low_interleaved);
+    morton_indices[0][1][0] = Morton<BLOCK_BITS>::combine_interleaved(denorm_x_low_interleaved,  denorm_y_high_interleaved, denorm_z_low_interleaved);
+    morton_indices[0][1][1] = Morton<BLOCK_BITS>::combine_interleaved(denorm_x_high_interleaved, denorm_y_high_interleaved, denorm_z_low_interleaved);
+    morton_indices[1][0][0] = Morton<BLOCK_BITS>::combine_interleaved(denorm_x_low_interleaved,  denorm_y_low_interleaved,  denorm_z_high_interleaved);
+    morton_indices[1][0][1] = Morton<BLOCK_BITS>::combine_interleaved(denorm_x_high_interleaved, denorm_y_low_interleaved,  denorm_z_high_interleaved);
+    morton_indices[1][1][0] = Morton<BLOCK_BITS>::combine_interleaved(denorm_x_low_interleaved,  denorm_y_high_interleaved, denorm_z_high_interleaved);
+    morton_indices[1][1][1] = Morton<BLOCK_BITS>::combine_interleaved(denorm_x_high_interleaved, denorm_y_high_interleaved, denorm_z_high_interleaved);
 
     simd::int32_v buffers[2][2][2];
 

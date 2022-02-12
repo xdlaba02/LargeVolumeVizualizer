@@ -127,6 +127,7 @@ public:
     return dsts;
   }
 
+  /*
   glm::vec4 integrate2(const BlockedVolume<T> &volume, const glm::vec3 &origin, const glm::vec3 &direction) const {
 
     glm::vec4 dst(0.f, 0.f, 0.f, 1.f);
@@ -196,6 +197,7 @@ public:
 
     return dst;
   }
+  */
 private:
   PreintegratedTransferFunction<T> m_transfer_r;
   PreintegratedTransferFunction<T> m_transfer_g;

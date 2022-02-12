@@ -1,33 +1,77 @@
 #pragma once
 
-namespace morton {
-  template <typename T>
-  inline constexpr T interleave_4b_3d(T v) {
-    v = (v | (v << 4)) & 0x0C3;
-    return (v | (v << 2)) & 0x249;
-  }
+#include <cstddef>
+
+#include <bit>
+
+template <size_t BITS>
+class Morton {
+public:
+    template <typename T>
+    static inline constexpr T interleave(T v) {
+      return interleaver<std::bit_width(BITS)>(v);
+    }
+
+    template <typename T>
+    static inline constexpr T combine_interleaved(T x, T y, T z) {
+      return x | (y << 1) | (z << 2);
+    }
+
+    template <typename T>
+    static inline constexpr T to_index(T x, T y, T z) {
+      return combine_interleaved(interleave(x), interleave(y), interleave(z));
+    }
+
+    template <typename T>
+    static inline constexpr T deinterleave(T v) {
+      return deinterleaver<std::bit_width(BITS)>(v);
+    }
+
+    template <typename T>
+    static inline constexpr void separate_interleaved(T v, T &x, T &y, T &z) {
+      x = (v >> 0) & magic_number<T>(1);
+      y = (v >> 1) & magic_number<T>(1);
+      z = (v >> 2) & magic_number<T>(1);
+    }
+
+    template <typename T>
+    static inline constexpr void from_index(T v, T &x, T &y, T &z) {
+      separate_interleaved(v, x, y, z);
+      x = deinterleave(x);
+      y = deinterleave(y);
+      z = deinterleave(z);
+    }
+
+private:
 
   template <typename T>
-  inline constexpr T combine_interleaved(T x, T y, T z) {
-    return x | (y << 1) | (z << 2);
+  static inline consteval T magic_number(T bits) {
+    T result = (1 << bits) - 1;
+    for (T shift = bits * 3; shift < T(sizeof(T) * 8); shift <<= 1) {
+      result |= result << shift;
+    }
+    return result;
   }
 
-  template <typename T>
-  inline constexpr T to_index_4b_3d(T x, T y, T z) {
-    return combine_interleaved(interleave_4b_3d(x), interleave_4b_3d(y), interleave_4b_3d(z));
+  template <size_t WIDTH, typename T, typename std::enable_if_t<WIDTH == 1, bool> = true>
+  static inline constexpr T interleaver(T v) {
+    return (v | (v << (1 << WIDTH))) & magic_number<T>(1 << (WIDTH - 1));
   }
 
-  template <typename T>
-  inline constexpr T deinterleave_4b_3d(T v) {
-    v &= 0x249;
-    v = (v | (v >> 2)) & 0x0C3;
-    return (v | (v >> 4)) & 0x00F;
+  template <size_t WIDTH, typename T, typename std::enable_if_t<WIDTH != 1, bool> = true>
+  static inline constexpr T interleaver(T v) {
+    v = (v | (v << (1 << WIDTH))) & magic_number<T>(1 << (WIDTH - 1));
+    return interleaver<WIDTH - 1, T>(v);
   }
 
-  template <typename T>
-  inline constexpr void from_index_4b_3d(T v, T &x, T &y, T &z) {
-    x = deinterleave_4b_3d(v >> 0);
-    y = deinterleave_4b_3d(v >> 1);
-    z = deinterleave_4b_3d(v >> 2);
+  template <size_t WIDTH, typename T, typename std::enable_if_t<WIDTH == 1, bool> = true>
+  static inline constexpr T deinterleaver(T v) {
+    return (v | (v >> (1 << WIDTH))) & magic_number<T>(1 << WIDTH);
   }
-}
+
+  template <size_t WIDTH, typename T, typename std::enable_if_t<WIDTH != 1, bool> = true>
+  static inline constexpr T deinterleaver(T v) {
+    v = deinterleaver<WIDTH - 1, T>(v);
+    return (v | (v >> (1 << WIDTH))) & magic_number<T>(1 << WIDTH);
+  }
+};

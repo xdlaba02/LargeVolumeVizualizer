@@ -11,8 +11,8 @@ inline T byteswap(T value) {
 
 template<typename T, typename std::enable_if_t<sizeof(T) == 2, bool> = true>
 inline T byteswap(T value) {
-  uint16_t &num = reinterpret_cast<uint16_t>(value);
-  
+  uint16_t &num = reinterpret_cast<uint16_t &>(value);
+
   num = (num >> 8)
       | (num << 8);
 
@@ -21,7 +21,7 @@ inline T byteswap(T value) {
 
 template<typename T, typename std::enable_if_t<sizeof(T) == 4, bool> = true>
 inline T byteswap(T value) {
-  uint32_t &num = reinterpret_cast<uint32_t>(value);
+  uint32_t &num = reinterpret_cast<uint32_t &>(value);
 
   num = (num >> 24)
       | ((num & 0x00ff0000) >> 8)
@@ -33,7 +33,7 @@ inline T byteswap(T value) {
 
 template<typename T, typename std::enable_if_t<sizeof(T) == 8, bool> = true>
 inline T byteswap(T value) {
-  uint64_t &num = reinterpret_cast<uint64_t>(value);
+  uint64_t &num = reinterpret_cast<uint64_t &>(value);
 
   num = (num >> 56)
       | ((num & 0x00ff000000000000) >> 40)
