@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cstddef>
+#include <cstdint>
 
 #include <bit>
 
@@ -9,7 +9,7 @@ class Morton {
 public:
     template <typename T>
     static inline constexpr T interleave(T v) {
-      return interleaver<std::bit_width(BITS)>(v);
+      return interleaver<std::bit_width(BITS - 1)>(v);
     }
 
     template <typename T>
@@ -24,7 +24,7 @@ public:
 
     template <typename T>
     static inline constexpr T deinterleave(T v) {
-      return deinterleaver<std::bit_width(BITS)>(v);
+      return deinterleaver<std::bit_width(BITS - 1)>(v);
     }
 
     template <typename T>
