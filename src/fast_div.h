@@ -12,11 +12,11 @@
 
 template <typename T, T D>
 class FastDiv {
-  static constexpr T computeMult(const T &shift) {
+  static consteval T computeMult(const T &shift) {
     return std::ceil((1 << shift) / static_cast<double>(D));
   }
 
-  static constexpr T bestShiftSearch() {
+  static consteval T bestShiftSearch() {
     T best_shift = 0;
     uint64_t best_i = 0;
 
@@ -43,6 +43,6 @@ class FastDiv {
   }
 
 public:
-  static constexpr T SHIFT = bestShiftSearch();
-  static constexpr T MULT = computeMult(SHIFT);
+  static constinit T SHIFT = bestShiftSearch();
+  static constinit T MULT = computeMult(SHIFT);
 };
