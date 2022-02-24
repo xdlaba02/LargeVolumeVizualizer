@@ -10,14 +10,9 @@
 
 #include <numeric>
 
-struct BoundingBox {
-  glm::vec3 min;
-  glm::vec3 max;
-};
-
 struct RayRange {
-  float min = std::numeric_limits<float>::infinity();
-  float max = -std::numeric_limits<float>::infinity();
+  float min;
+  float max;
 };
 
 struct Ray {
@@ -50,15 +45,6 @@ void recursive_integrate(const Ray &ray, const RayRange &range, glm::vec<3, uint
     // fast sort axis by tcenter
     std::array<uint8_t, 3> axis;
 
-#if 1
-    uint8_t order = ((tcenter[0] < tcenter[1]) << 2)
-                  | ((tcenter[0] < tcenter[2]) << 1)
-                  | ((tcenter[1] < tcenter[2]) << 0);
-
-    axis[0] = std::array<uint8_t, 8>{ 2, 1, 0, 1, 2, 0, 0, 0 }[order];
-    axis[1] = std::array<uint8_t, 8>{ 1, 2, 0, 0, 0, 1, 2, 1 }[order];
-    axis[2] = std::array<uint8_t, 8>{ 0, 0, 0, 2, 1, 2, 1, 2 }[order];
-#else
     bool gt01 = tcenter[0] > tcenter[1];
     bool gt02 = tcenter[0] > tcenter[2];
     bool gt12 = tcenter[1] > tcenter[2];
@@ -66,11 +52,10 @@ void recursive_integrate(const Ray &ray, const RayRange &range, glm::vec<3, uint
     axis[ gt01 +  gt02] = 0;
     axis[!gt01 +  gt12] = 1;
     axis[!gt02 + !gt12] = 2;
-#endif
 
     float tmin = range.min;
     for (uint8_t i = 0; i < 3; i++) {
-      float tmax = tcenter[axis[i]];
+      float tmax = std::min(tcenter[axis[i]], range.max);
 
       if (tmin < tmax) {
         recursive_integrate(ray, { tmin, tmax }, child_cell, layer - 1, callback);
@@ -126,6 +111,9 @@ void render(const BlockedVolume<T> &volume, const glm::mat4 &mv, uint32_t width,
       glm::vec4 dst(0.f, 0.f, 0.f, 1.f);
 
       if (tmin < tmax) {
+        // TODO in callback perform checks if the node is relevant, if the node could be fast integrated.
+        // also perform the integration itself if needed.
+        // return true if the thing should recurse.
         recursive_integrate(ray, { tmin, tmax }, { 0, 0, 0 }, std::size(volue.layers) - 1, /* TODO output */);
       }
 
