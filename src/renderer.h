@@ -10,26 +10,50 @@
 
 #include <numeric>
 
-struct Ray {
-  Ray(const glm::vec3 &origin, const glm::vec3 &direction)
-      : origin(origin)
-      , direction(direction)
-      , direction_inverse(1.f / direction)
-  {}
-
-  glm::vec3 origin;
-  glm::vec3 direction;
-  glm::vec3 direction_inverse;
-};
-
 struct BoundingBox {
   glm::vec3 min;
   glm::vec3 max;
 };
 
 struct RayRange {
-  float min;
-  float max;
+  float min = std::numeric_limits<float>::infinity();
+  float max = -std::numeric_limits<float>::infinity();
+};
+
+struct Ray {
+  Ray(const glm::vec3 &origin, const glm::vec3 &direction)
+      : origin(origin)
+      , direction(direction)
+      , direction_inverse(1.f / direction)
+  {
+    std::array<float, 8> tmins {};
+
+    static constinit std::array<glm::vec3, 3> points { glm::vec3{ 0.0f, 0.0f, 0.0f },
+                                                       glm::vec3{ 0.5f, 0.5f, 0.5f },
+                                                       glm::vec3{ 1.0f, 1.0f, 1.0f } };
+
+    for (uint8_t z: {0, 1}) {
+      for (uint8_t y: {0, 1}) {
+        for (uint8_t x: {0, 1}) {
+          uint8_t i = z << 2 | y << 1 | x;
+
+          glm::vec3 min = { points[x + 0].x, points[y + 0].y, points[z + 0].z };
+          glm::vec3 max = { points[x + 1].x, points[y + 1].y, points[z + 1].z };
+
+          float dummy_max;
+          intersect_aabb_ray(origin, direction_inverse, min, max, tmins[i], dummy_max);
+        }
+      }
+    }
+
+    std::iota(std::begin(octant_order), std::end(octant_order), 0);
+    std::sort(std::begin(octant_order), std::end(octant_order), [&](uint8_t l, uint8_t r) { return tmins[l] < tmins[r]; });
+  }
+
+  glm::vec3 origin;
+  glm::vec3 direction;
+  glm::vec3 direction_inverse;
+  std::array<uint8_t, 8> octant_order;
 };
 
 template <typename T, typename F>
@@ -45,23 +69,85 @@ void recursive_integrate(const BlockedVolume<T> &volume, const Ray &ray, const R
     }
   }
   else {
+    
     glm::vec3 avg = (bb.min + bb.max) / 2.f;
 
-    BoundingBox bbs[8];
-    RayRange ranges[8];
+    BoundingBox bbs[2][2][2];
+    RayRange ranges[0][1][0][2][2];
 
-    std::array<const glm::vec3 *, 3> points {&bb.min, &avg, &bb.max};
+    bbs[0][0][0].min = {bb.min.x, bb.min.y, bb.min.z};
+    bbs[0][0][0].max = {avg.x, avg.y, avg.z};
 
-    // TODO inline and optimize
-    for (uint8_t z: {0, 1}) {
+    bbs[0][0][1].min = {avg.x, bb.min.y, bb.min.z};
+    bbs[0][0][1].max = {bb.max.x, avg.y, avg.z};
+
+    bbs[0][1][0].min = {bb.min.x, avg.y, bb.min.z};
+    bbs[0][1][0].max = {avg.x, bb.max.y, avg.z};
+
+    bbs[0][1][1].min = {avg.x, avg.y, bb.min.z};
+    bbs[0][1][1].max = {bb.max.x, bb.max.y, avg.z};
+
+    bbs[1][0][0].min = {bb.min.x, bb.min.y, avg.z};
+    bbs[1][0][0].max = {avg.x, avg.y, bb.max.z};
+
+    bbs[1][0][1].min = {avg.x, bb.min.y, avg.z};
+    bbs[1][0][1].max = {bb.max.x, avg.y, bb.max.z};
+
+    bbs[1][1][0].min = {bb.min.x, avg.y, avg.z};
+    bbs[1][1][0].max = {avg.x, bb.max.y, bb.max.z};
+
+    bbs[1][1][1].min = {avg.x, avg.y, avg.z};
+    bbs[1][1][1].max = {bb.max.x, bb.max.y, bb.max.z};
+
+    glm::vec3 tavg = (avg - ray.origin) * ray.direction_inverse;
+
+    if (ray.direction_inverse.x < 0.f) {
+      for (uint8_t z: {0, 1}) {
+        for (uint8_t y: {0, 1}) {
+          ranges[z][y][0].min = std::max(ranges[z][y][0].min, tavg.x);
+          ranges[z][y][1].max = std::min(ranges[z][y][1].max, tavg.x);
+        }
+      }
+    }
+    else {
+      for (uint8_t z: {0, 1}) {
+        for (uint8_t y: {0, 1}) {
+          ranges[z][y][1].min = std::max(ranges[z][y][1].min, tavg.x);
+          ranges[z][y][0].max = std::min(ranges[z][y][0].max, tavg.x);
+        }
+      }
+    }
+
+    if (ray.direction_inverse.y < 0.f) {
+      for (uint8_t z: {0, 1}) {
+        for (uint8_t x: {0, 1}) {
+          ranges[z][0][x].min = std::max(ranges[z][0][x].min, tavg.y);
+          ranges[z][1][x].max = std::min(ranges[z][1][x].max, tavg.y);
+        }
+      }
+    }
+    else {
+      for (uint8_t z: {0, 1}) {
+        for (uint8_t x: {0, 1}) {
+          ranges[z][1][x].min = std::max(ranges[z][1][x].min, tavg.y);
+          ranges[z][0][x].max = std::min(ranges[z][0][x].max, tavg.y);
+        }
+      }
+    }
+
+    if (ray.direction_inverse.z < 0.f) {
       for (uint8_t y: {0, 1}) {
         for (uint8_t x: {0, 1}) {
-          uint8_t i = z << 2 | y << 2 | x;
-
-          bbs[i].min = {points[x + 0]->x, points[y + 0]->y, points[z + 0]->z};
-          bbs[i].max = {points[x + 1]->x, points[y + 1]->y, points[z + 1]->z};
-
-          intersect_aabb_ray(ray.origin, ray.direction_inverse, bbs[i].min, bbs[i].max, ranges[i].min, ranges[i].max);
+          ranges[0][y][x].min = std::max(ranges[0][y][x].min, tavg.z);
+          ranges[1][y][x].max = std::min(ranges[1][y][x].max, tavg.z);
+        }
+      }
+    }
+    else {
+      for (uint8_t y: {0, 1}) {
+        for (uint8_t x: {0, 1}) {
+          ranges[1][y][x].min = std::max(ranges[1][y][x].min, tavg.z);
+          ranges[0][y][x].max = std::min(ranges[0][y][x].max, tavg.z);
         }
       }
     }
@@ -70,7 +156,7 @@ void recursive_integrate(const BlockedVolume<T> &volume, const Ray &ray, const R
     std::iota(std::begin(octants), std::end(octants), 0);
 
     // Sort first fout octants from nearest to furthest - the ray cannot collide with more than 4 octants
-    std::partial_sort(std::begin(octants), std::begin(octants) + 4, std::end(octants), [&](uint8_t l, uint8_t r) { return ranges[l].min < ranges[r].max; });
+    std::partial_sort(std::begin(octants), std::begin(octants) + 4, std::end(octants), [&](uint8_t l, uint8_t r) { return ranges[l].min < ranges[r].min; });
 
     for (uint8_t i: {0, 1, 2, 3}) {
       if (ranges[octants[i]].min < tmax) {
