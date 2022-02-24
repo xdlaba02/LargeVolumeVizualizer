@@ -42,6 +42,22 @@ struct Ray {
 
           float dummy_max;
           intersect_aabb_ray(origin, direction_inverse, min, max, tmins[i], dummy_max);
+
+          tmins[i] = -std::numeric_limits<float>::infinity();
+
+          for (uint32_t i = 0; i < 3; ++i) {
+            float t0 = (min[i] - origin[i]) * direction_inverse[i];
+            float t1 = (max[i] - origin[i]) * direction_inverse[i];
+
+            if (ray_direction_inverse[i] < 0.f) {
+              tmin = std::max(tmin, t1);
+              tmax = std::min(tmax, t0);
+            }
+            else {
+              tmin = std::max(tmin, t0);
+              tmax = std::min(tmax, t1);
+            }
+          }
         }
       }
     }
@@ -50,14 +66,34 @@ struct Ray {
     std::sort(std::begin(octant_order), std::end(octant_order), [&](uint8_t l, uint8_t r) { return tmins[l] < tmins[r]; });
   }
 
+  RayRange reduceRange(uint8_t octant, const RayRange &range, const glm::vec3 &tcenter) const {
+    Range octant_range = range;
+
+    for (uint8_t d: {0, 1, 2}) {
+      usint8_t pos = octant_order[octant] & (1 << d);
+      uint8_t near = direction[d] < 0;
+
+      if (pos == near) {
+        octant_range.max = std::min(octant_range.max, tcenter[d]);
+      }
+      else {
+        octant_range.min = std::max(octant_range.min, tcenter[d]);
+      }
+    }
+
+    return octant_range;
+  }
+
   glm::vec3 origin;
   glm::vec3 direction;
   glm::vec3 direction_inverse;
+
+private:
   std::array<uint8_t, 8> octant_order;
 };
 
 template <typename T, typename F>
-void recursive_integrate(const BlockedVolume<T> &volume, const Ray &ray, const RayRange &range, const BoundingBox &bb, uint32_t layer, F &callback) {
+void recursive_integrate(const BlockedVolume<T> &volume, const Ray &ray, const RayRange &range, const glm::vec3 &center, uint32_t layer, F &callback) {
   if (layer == std::size(volume.layers) - 1) {
 
     float stepsize = m_stepsize * (std::size(volume.layers) - layer);
@@ -69,98 +105,16 @@ void recursive_integrate(const BlockedVolume<T> &volume, const Ray &ray, const R
     }
   }
   else {
-    
-    glm::vec3 avg = (bb.min + bb.max) / 2.f;
+    // find collisions of the ray with three center planes
+    glm::vec3 tcenter = (center - ray.origin) * ray.direction_inverse;
 
-    BoundingBox bbs[2][2][2];
-    RayRange ranges[0][1][0][2][2];
+    // Find ranges of t for suboctants, recurse if intersecting.
+    for (uint8_t i = 0; i < 8; i++) {
+      // This is faster than ray-bb intersection. It reduces existing range.
+      Range octant_range = ray.reduceRange(i, range, tcenter);
 
-    bbs[0][0][0].min = {bb.min.x, bb.min.y, bb.min.z};
-    bbs[0][0][0].max = {avg.x, avg.y, avg.z};
-
-    bbs[0][0][1].min = {avg.x, bb.min.y, bb.min.z};
-    bbs[0][0][1].max = {bb.max.x, avg.y, avg.z};
-
-    bbs[0][1][0].min = {bb.min.x, avg.y, bb.min.z};
-    bbs[0][1][0].max = {avg.x, bb.max.y, avg.z};
-
-    bbs[0][1][1].min = {avg.x, avg.y, bb.min.z};
-    bbs[0][1][1].max = {bb.max.x, bb.max.y, avg.z};
-
-    bbs[1][0][0].min = {bb.min.x, bb.min.y, avg.z};
-    bbs[1][0][0].max = {avg.x, avg.y, bb.max.z};
-
-    bbs[1][0][1].min = {avg.x, bb.min.y, avg.z};
-    bbs[1][0][1].max = {bb.max.x, avg.y, bb.max.z};
-
-    bbs[1][1][0].min = {bb.min.x, avg.y, avg.z};
-    bbs[1][1][0].max = {avg.x, bb.max.y, bb.max.z};
-
-    bbs[1][1][1].min = {avg.x, avg.y, avg.z};
-    bbs[1][1][1].max = {bb.max.x, bb.max.y, bb.max.z};
-
-    glm::vec3 tavg = (avg - ray.origin) * ray.direction_inverse;
-
-    if (ray.direction_inverse.x < 0.f) {
-      for (uint8_t z: {0, 1}) {
-        for (uint8_t y: {0, 1}) {
-          ranges[z][y][0].min = std::max(ranges[z][y][0].min, tavg.x);
-          ranges[z][y][1].max = std::min(ranges[z][y][1].max, tavg.x);
-        }
-      }
-    }
-    else {
-      for (uint8_t z: {0, 1}) {
-        for (uint8_t y: {0, 1}) {
-          ranges[z][y][1].min = std::max(ranges[z][y][1].min, tavg.x);
-          ranges[z][y][0].max = std::min(ranges[z][y][0].max, tavg.x);
-        }
-      }
-    }
-
-    if (ray.direction_inverse.y < 0.f) {
-      for (uint8_t z: {0, 1}) {
-        for (uint8_t x: {0, 1}) {
-          ranges[z][0][x].min = std::max(ranges[z][0][x].min, tavg.y);
-          ranges[z][1][x].max = std::min(ranges[z][1][x].max, tavg.y);
-        }
-      }
-    }
-    else {
-      for (uint8_t z: {0, 1}) {
-        for (uint8_t x: {0, 1}) {
-          ranges[z][1][x].min = std::max(ranges[z][1][x].min, tavg.y);
-          ranges[z][0][x].max = std::min(ranges[z][0][x].max, tavg.y);
-        }
-      }
-    }
-
-    if (ray.direction_inverse.z < 0.f) {
-      for (uint8_t y: {0, 1}) {
-        for (uint8_t x: {0, 1}) {
-          ranges[0][y][x].min = std::max(ranges[0][y][x].min, tavg.z);
-          ranges[1][y][x].max = std::min(ranges[1][y][x].max, tavg.z);
-        }
-      }
-    }
-    else {
-      for (uint8_t y: {0, 1}) {
-        for (uint8_t x: {0, 1}) {
-          ranges[1][y][x].min = std::max(ranges[1][y][x].min, tavg.z);
-          ranges[0][y][x].max = std::min(ranges[0][y][x].max, tavg.z);
-        }
-      }
-    }
-
-    uint8_t octants[8];
-    std::iota(std::begin(octants), std::end(octants), 0);
-
-    // Sort first fout octants from nearest to furthest - the ray cannot collide with more than 4 octants
-    std::partial_sort(std::begin(octants), std::begin(octants) + 4, std::end(octants), [&](uint8_t l, uint8_t r) { return ranges[l].min < ranges[r].min; });
-
-    for (uint8_t i: {0, 1, 2, 3}) {
-      if (ranges[octants[i]].min < tmax) {
-        recursive_integrate(volume, ray, ranges[octants[i]], bbs[octants[i]], layer + 1, dst);
+      if (octant_range.min < octant_range.max) {
+        recursive_integrate(volume, ray, octant_range, /*TODO*/, layer + 1, dst);
       }
     }
   }
@@ -194,17 +148,89 @@ void render(const BlockedVolume<T> &volume, const glm::mat4 &mv, uint32_t width,
 
       Ray ray(origin, ray_transform * glm::normalize(glm::vec4(x, y, -1.f, 0.f)));
 
-      float tmin, tmax;
+      RayRange range {};
 
-      intersect_aabb_ray(ray.origin, ray.direction_inverse, {0.f, 0.f, 0.f}, {1.f, 1.f, 1.f}, tmin, tmax);
+      intersect_aabb_ray(ray.origin, ray.direction_inverse, {0.f, 0.f, 0.f}, {1.f, 1.f, 1.f}, range.min, range.max);
 
       glm::vec4 dst(0.f, 0.f, 0.f, 1.f);
 
       if (tmin < tmax) {
-        recursive_integrate(volume, ray, tmin, tmax, {0.f, 0.f, 0.f}, {1.f, 1.f, 1.f}, 0, dst);
+        recursive_integrate(volume, ray, range, {0.5f, 0.5f, 0.5f}, 0, dst);
       }
 
       output(i, j, dst);
     }
   }
+}
+
+bool traverse(Ray ray, int depth, uint node_index, Vec3f cell, float tenter, float texit) {
+  Vec3f center = Vec3f( cell | Vec3i((1 << (max_depth - depth - 1))) );
+
+  Vec3f tcenter = (center - ray.orig) / ray.dir;
+
+  Vec3f penter = ray.orig + ray.dir * tenter;
+  Vec3i child_cell = cell;
+  Vec3i tc;
+
+  tc.x = (penter.x >= center.x);
+  tc.y = (penter.y >= center.y);
+  tc.z = (penter.z >= center.z);
+
+  int child = tc.x << 2 | tc.y << 1 | tc.z;
+
+  child_cell.x |= tc.x ? (1 << (max_depth - depth - 1)) : 0;
+  child_cell.y |= tc.y ? (1 << (max_depth - depth - 1)) : 0;
+  child_cell.z |= tc.z ? (1 << (max_depth - depth - 1)) : 0;
+
+  Vec3i axis_isects;
+
+  {perform 3-way minimum of tcenter such that axis_isects
+  contains the sorted intersection with the X,Y,Z
+  octant mid-planes}
+
+  const int axis_table[] = {4, 2, 1};
+  float child_tenter = tenter;
+  float child_texit;
+
+  for({all valid axis_isects[i] while tcenter < texit} ; i++) {
+    child_texit = min(tcenter[axis_isects[i]], texit);
+
+    OctNode &node = nodes[depth][node_index];
+    if (isovalue >= node.child_mins[child] || isovalue <= node.child_maxs[child]) {
+      //traverse scalar leaf, cap or node
+      if (node.child_offset == -1) {
+        if (traverse_scalar_leaf(...)) {
+          return true;
+        }
+      }
+      else if (depth == max_depth - 2) {
+        if (traverse_cap(...)) {
+          return true;
+        }
+      }
+      else {
+        if (traverse(ray,depth + 1, child_cell, child_tenter, child_texit)) {
+          return true;
+        }
+      }
+    }
+
+    if (child_texit == texit) {
+      return false;
+    }
+
+    child_tenter = child_texit;
+    axisbit = axis_table[axis_isects[i]];
+
+    if (child & axisbit) {
+      child &= ~axisbit;
+      child_cell[axis_isects[i]] &= ~(1 << (max_depth - depth - 1));
+    }
+    else {
+      child |= axisbit;
+      child_cell[axis_isects[i]] |= (1 << (max_depth - depth - 1));
+    }
+  }
+
+  return false;
 }
