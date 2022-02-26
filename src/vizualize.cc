@@ -1,5 +1,5 @@
 
-#include "integrator.h"
+#include "renderer.h"
 #include "blocked_volume.h"
 #include "linear_gradient.h"
 #include "preintegrated_transfer_function.h"
@@ -10,7 +10,6 @@
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/matrix_inverse.hpp>
 
 #include <cmath>
 
@@ -39,6 +38,8 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
+  GLFW glfw(1920, 1080, "Volumetric Vizualizer");
+
   std::map<float, glm::vec3> color_map {
     #if 0
     {80.f,  {0.75f, 0.5f, 0.25f}},
@@ -64,13 +65,14 @@ int main(int argc, char *argv[]) {
     #endif
   };
 
-  auto transfer_function = [&](float v) {
-    return glm::vec4(linear_gradient(color_map, v), linear_gradient(alpha_map, v));
+  PreintegratedTransferFunction<uint8_t> preintegrated_r([&](float v){ return linear_gradient(color_map, v).r; });
+  PreintegratedTransferFunction<uint8_t> preintegrated_g([&](float v){ return linear_gradient(color_map, v).g; });
+  PreintegratedTransferFunction<uint8_t> preintegrated_b([&](float v){ return linear_gradient(color_map, v).b; });
+  PreintegratedTransferFunction<uint8_t> preintegrated_a([&](float v){ return linear_gradient(alpha_map, v); });
+
+  auto transfer_function = [&](float v0, float v1) {
+    return glm::vec4(preintegrated_r(v0, v1), preintegrated_g(v0, v1), preintegrated_b(v0, v1), preintegrated_a(v0, v1));
   };
-
-  Integrator<uint8_t> integrator(transfer_function, 0.005);
-
-  GLFW glfw(1920, 1080, "Volumetric Vizualizer");
 
   auto prev_time = std::chrono::steady_clock::now();
 
@@ -85,9 +87,6 @@ int main(int argc, char *argv[]) {
 
   glm::vec3 volume_pos   = glm::vec3(0.0f, 0.0f, 0.0f);
   glm::vec3 volume_scale = glm::vec3(1.0f, 1.0f, 1.0f);
-
-  constexpr float yFOV = std::tan(45 * M_PI / 180 * 0.5);
-  float aspect = float(glfw.width()) / float(glfw.height());
 
   float t = 0.f;
   while (!glfw.shouldClose()) {
@@ -169,58 +168,19 @@ int main(int argc, char *argv[]) {
       }
     }
 
-    // object space - volume in 3D interval <0, 1>
-    // normalized object space - volume in 3D interval <-0.5, 0.5> - good for transformations because origin is at center of the volume.
-
-    glm::mat4 norm = glm::translate(glm::mat4(1.f), glm::vec3(-0.5f, -0.5f, -0.5f));
-
-    glm::mat4 norm_invese = glm::inverse(norm);
-
     glm::mat4 model = glm::translate(glm::mat4(1.f), volume_pos)
                     * glm::rotate(glm::mat4(1.f), t, glm::vec3(0.f, 1.f, 0.f))
                     * glm::rotate(glm::mat4(1.f), glm::radians(90.f), glm::vec3(1.f, 0.f, 0.f))
                     * glm::scale(glm::mat4(1.f), volume_scale);
 
-    glm::mat4 model_inverse = glm::inverse(model);
-
     glm::mat4 view = glm::lookAt(camera_pos, camera_pos + camera_front, camera_up);
-    glm::mat4 view_inverse = glm::inverse(view);
 
-    glm::mat4 norm_model_inverse = norm_invese * model_inverse;
-    glm::mat4 norm_model_view_inverse = norm_model_inverse * view_inverse;
-
-    glm::vec3 ray_origin = norm_model_inverse * glm::vec4(camera_pos, 1); // camera_pos is in world space, transform to object space
-
-    #pragma omp parallel for schedule(dynamic)
-    for (uint32_t j = 0; j < glfw.height(); j++) {
-      float y = (2 * (j + 0.5) / glfw.height() - 1) * yFOV;
-
-      for (uint32_t i = 0; i < glfw.width(); i += simd::len) {
-        simd::float_v is = simd::float_v::IndexesFromZero() + i;
-        simd::float_v xs = (2 * (is + 0.5f) / float(glfw.width()) - 1) * aspect * yFOV;
-
-        glm::vec<3, simd::float_v> directions {};
-        for (uint32_t k = 0; k < simd::len; k++) {
-          glm::vec3 direction = norm_model_view_inverse * glm::normalize(glm::vec4(xs[k], y, -1, 0)); // generate ray normalized in view space and transform to object space
-#if 1
-          glm::vec<4, simd::uint32_v> dsts = integrator.integrate(volume, ray_origin, direction, int(t) % std::size(volume.info.layers)) * 255.f;
-#else
-          directions.x[k] = direction.x;
-          directions.y[k] = direction.y;
-          directions.z[k] = direction.z;
-        }
-
-        glm::vec<4, simd::uint32_v> dsts = integrator.integrate(volume, ray_origin, directions, simd::uint32_v(int(t) % std::size(volume.info.layers))) * simd::float_v(255.f);
-
-        for (uint32_t k = 0; k < simd::len; k++) {
-#endif
-          uint8_t *triplet = glfw.raster(i, j) + k * 3;
-          triplet[0] = dsts.r[k];
-          triplet[1] = dsts.g[k];
-          triplet[2] = dsts.b[k];
-        }
-      }
-    }
+    render(volume, model * view, glfw.width(), glfw.height(), 45.f, .001f, transfer_function, [&](uint32_t x, uint32_t y, const glm::vec4 &output) {
+      uint8_t *triplet = glfw.raster(x, y);
+      triplet[0] = output.r;
+      triplet[1] = output.g;
+      triplet[2] = output.b;
+    });
 
     glfw.swapBuffers();
     glfw.pollEvents();

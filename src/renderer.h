@@ -17,7 +17,6 @@ struct RayRange {
 
 struct Ray {
   Ray(const glm::vec3 &origin, const glm::vec3 &direction): origin(origin), direction(direction), direction_inverse(1.f / direction) {}
-
   const glm::vec3 origin;
   const glm::vec3 direction;
   const glm::vec3 direction_inverse;
@@ -25,20 +24,14 @@ struct Ray {
 
 // Interactive isosurface ray tracing of large octree volumes
 // https://www.researchgate.net/publication/310054812_Interactive_isosurface_ray_tracing_of_large_octree_volumes
-template <typename T, typename F>
-void recursive_integrate(const Ray &ray, const RayRange &range, glm::vec<3, uint32_t> cell, uint32_t layer, F &callback) {
-  if (callback(range, cell >> layer /* FIXME this might be off one bit error*/, layer)) {
+
+// TODO everything is in cannonical blocked volume space. Test if it is possible to use it in interval [0, 1] and possibly keep it in integer arithmetics
+template <typename F>
+void recursive_integrate(const Ray &ray, const RayRange &range, const glm::vec<3, uint32_t> &cell, uint32_t layer, const F &callback) {
+  if (callback(range, cell, layer)) {
     uint32_t child_bit = 1 << layer;
 
     glm::vec<3, uint32_t> center = cell | child_bit;
-
-    glm::vec3 penter = ray.origin + ray.direction * range.min;
-
-    glm::vec<3, uint32_t> child_cell = cell;
-
-    child_cell.x |= penter.x > center.x ? child_bit : 0;
-    child_cell.y |= penter.y > center.y ? child_bit : 0;
-    child_cell.z |= penter.z > center.z ? child_bit : 0;
 
     glm::vec3 tcenter = (glm::vec3(center) - ray.origin) * ray.direction_inverse;
 
@@ -53,6 +46,14 @@ void recursive_integrate(const Ray &ray, const RayRange &range, glm::vec<3, uint
     axis[!gt01 +  gt12] = 1;
     axis[!gt02 + !gt12] = 2;
 
+    glm::vec3 penter = ray.origin + ray.direction * range.min;
+
+    glm::vec<3, uint32_t> child_cell {
+      penter.x > center.x ? center.x : cell.x,
+      penter.y > center.y ? center.y : cell.y,
+      penter.z > center.z ? center.z : cell.z
+    };
+
     float tmin = range.min;
     for (uint8_t i = 0; i < 3; i++) {
       float tmax = std::min(tcenter[axis[i]], range.max);
@@ -61,6 +62,7 @@ void recursive_integrate(const Ray &ray, const RayRange &range, glm::vec<3, uint
         recursive_integrate(ray, { tmin, tmax }, child_cell, layer - 1, callback);
         tmin = tmax;
 
+        // TODO is this right?
         child_cell[axis[i]] ^= child_bit;
       }
     }
@@ -71,14 +73,12 @@ void recursive_integrate(const Ray &ray, const RayRange &range, glm::vec<3, uint
   }
 }
 
-template <typename T, typename F>
-void render(const BlockedVolume<T> &volume, const glm::mat4 &mv, uint32_t width, uint32_t height, float yfov_degrees, const F &output) {
+template <typename T, typename TransferFunctionType, typename OutputFunctionType>
+void render(const BlockedVolume<T> &volume, const glm::mat4 &mv, uint32_t width, uint32_t height, float yfov_degrees, float step, const TransferFunctionType &transfer_function, const OutputFunctionType &output_function) {
 
-  glm::vec3 size_in_blocks { volume.info.layers[0].width_in_blocks,
-                             volume.info.layers[0].height_in_blocks,
-                             volume.info.layers[0].depth_in_blocks };
+  glm::vec3 size_in_blocks = glm::vec3(1 << (std::size(volume.info.layers) - 1));
 
-  // This transfroms ray from cannocical clip space to object space where volume is inside boundig box (0, 0, 0), (width_in_blocks, height_in_blocks, depth_in_blocks)
+  // This transfroms ray from cannocical clip space to cannonical blocked volume space where volume is inside boundig box [0, 2^(num_layers - 1)]
   glm::mat4 ray_transform = glm::scale(glm::mat4(1.f), size_in_blocks) * glm::translate(glm::mat4(1.f), glm::vec3(0.5f, 0.5f, 0.5f)) * glm::inverse(mv);
 
   glm::vec3 origin = ray_transform * glm::vec4(0.f, 0.f, 0.f, 1.f);
@@ -110,86 +110,75 @@ void render(const BlockedVolume<T> &volume, const glm::mat4 &mv, uint32_t width,
 
       glm::vec4 dst(0.f, 0.f, 0.f, 1.f);
 
+      auto integrate = [&](float v0, float v1, float step) {
+        auto rgba = transfer_function(v0, v1);
+
+        if (rgba.a > 0.f) { // empty space skipping
+          float alpha = 1.f - std::exp(-rgba.a * step);
+
+          float coef = alpha * dst.a;
+
+          dst.r += rgba.r * coef;
+          dst.g += rgba.g * coef;
+          dst.b += rgba.b * coef;
+          dst.a *= 1.f - alpha;
+        }
+      };
+
       if (tmin < tmax) {
-        // TODO in callback perform checks if the node is relevant, if the node could be fast integrated.
-        // also perform the integration itself if needed.
-        // return true if the thing should recurse.
-        recursive_integrate(ray, { tmin, tmax }, { 0, 0, 0 }, std::size(volue.layers) - 1, /* TODO output */);
+        recursive_integrate(ray, { tmin, tmax }, { 0, 0, 0 }, std::size(volume.info.layers) - 1, [&](const RayRange &range, const glm::vec<3, uint32_t> &cell, uint32_t layer) {
+          //cell in cannonical blocked volume space [0, 2^(num_layers - 1)]
+          //block in layer space [0, 2^(num_layers - layer - 1)]
+          auto block = cell >> layer;
+
+          const auto &node = volume.nodes[volume.info.node_handle(block.x, block.y, block.z, layer)];
+
+          if (node.min == node.max) { // fast integration
+            integrate(node.min, node.max, range.max - range.min);
+          }
+          else { // integration by sampling
+
+            // dumb condition that causes the recursion to go all the way down.
+            // TODO do something elaborate here
+            if (layer) {
+              return true;
+            }
+
+            float t = range.min;
+            float prev_value;
+
+            // TODO move prev outside and initialize it somehow. Same with t;
+
+            // direction and everything is in cannonical BLOCKED volume space, but we need to step the position in cannocical volume space
+
+            {
+              glm::vec3 pos = (ray.origin + ray.direction * t) / float(1 << layer);
+              glm::vec3 in_block_pos = (pos - glm::vec3(block)) * float(BlockedVolume<T>::SUBVOLUME_SIDE) - .5f;
+              prev_value = volume.sample_block(node.block_handle, in_block_pos.x, in_block_pos.y, in_block_pos.z);
+            }
+
+            while (t < range.max) {
+              float next_step = std::min(step * (layer + 1), range.max - t);
+
+              t += next_step;
+
+              // fixme division
+              glm::vec3 pos = (ray.origin + ray.direction * t) / float(1 << layer);
+              glm::vec3 in_block_pos = (pos - glm::vec3(block)) * float(BlockedVolume<T>::SUBVOLUME_SIDE) - .5f;
+
+              float value = volume.sample_block(node.block_handle, in_block_pos.x, in_block_pos.y, in_block_pos.z);
+
+              integrate(value, prev_value, next_step);
+
+              prev_value = value;
+            }
+          }
+
+          return false;
+        });
       }
 
-      output(i, j, dst);
+      output_function(i, j, dst);
     }
   }
-}
-
-bool traverse(Ray ray, int depth, uint node_index, Vec3f cell, float tenter, float texit) {
-  Vec3f center = Vec3f( cell | Vec3i(child_bit) );
-
-  Vec3f tcenter = (center - ray.orig) / ray.dir;
-
-  Vec3f penter = ray.orig + ray.dir * tenter;
-  Vec3i child_cell = cell;
-  Vec3i tc;
-
-  tc.x = (penter.x >= center.x);
-  tc.y = (penter.y >= center.y);
-  tc.z = (penter.z >= center.z);
-
-  int child = tc.x << 2 | tc.y << 1 | tc.z;
-
-  child_cell.x |= tc.x ? child_bit : 0;
-  child_cell.y |= tc.y ? child_bit : 0;
-  child_cell.z |= tc.z ? child_bit : 0;
-
-  Vec3i axis_isects;
-
-  {perform 3-way minimum of tcenter such that axis_isects
-  contains the sorted intersection with the X,Y,Z
-  octant mid-planes}
-
-  const int axis_table[] = {4, 2, 1};
-  float child_tenter = tenter;
-  float child_texit;
-
-  for({all valid axis_isects[i] while tcenter < texit} ; i++) {
-    child_texit = min(tcenter[axis_isects[i]], texit);
-
-    OctNode &node = nodes[depth][node_index];
-    if (isovalue >= node.child_mins[child] || isovalue <= node.child_maxs[child]) {
-      //traverse scalar leaf, cap or node
-      if (node.child_offset == -1) {
-        if (traverse_scalar_leaf(...)) {
-          return true;
-        }
-      }
-      else if (depth == max_depth - 2) {
-        if (traverse_cap(...)) {
-          return true;
-        }
-      }
-      else {
-        if (traverse(ray,depth + 1, child_cell, child_tenter, child_texit)) {
-          return true;
-        }
-      }
-    }
-
-    if (child_texit == texit) {
-      return false;
-    }
-
-    child_tenter = child_texit;
-    axisbit = axis_table[axis_isects[i]];
-
-    if (child & axisbit) {
-      child &= ~axisbit;
-      child_cell[axis_isects[i]] &= ~child_bit;
-    }
-    else {
-      child |= axisbit;
-      child_cell[axis_isects[i]] |= child_bit;
-    }
-  }
-
-  return false;
 }

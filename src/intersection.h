@@ -17,6 +17,8 @@ inline void intersect_aabb_rays_single_origin(const glm::vec3& origin, glm::vec<
     tmins(t0 > tmins) = t0;
     tmaxs(t1 < tmaxs) = t1;
   }
+
+  tmins(tmins < 0.f) = 0.f; // solves when ray hits box from behind
 }
 
 inline void intersect_aabb_ray(const glm::vec3& origin, glm::vec3 ray_direction_inverse, const glm::vec3 &min, const glm::vec3 &max, float& tmin, float& tmax) {
@@ -36,4 +38,6 @@ inline void intersect_aabb_ray(const glm::vec3& origin, glm::vec3 ray_direction_
       tmax = std::min(tmax, t1);
     }
   }
+
+  tmin = std::max(tmin, 0.f); // solves when ray hits box from behind
 }
