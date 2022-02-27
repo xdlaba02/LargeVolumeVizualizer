@@ -25,11 +25,10 @@ struct Ray {
 // Interactive isosurface ray tracing of large octree volumes
 // https://www.researchgate.net/publication/310054812_Interactive_isosurface_ray_tracing_of_large_octree_volumes
 
-// TODO everything is in cannonical blocked volume space. Test if it is possible to use it in interval [0, 1] and possibly keep it in integer arithmetics
 template <typename F>
 void recursive_integrate(const Ray &ray, const RayRange &range, const glm::vec<3, uint32_t> &cell, uint32_t layer, const F &callback) {
   if (callback(range, cell, layer)) {
-    uint32_t child_bit = 1 << layer;
+    uint32_t child_bit = 1 << (layer - 1); // FIXME is this right? layer 0 has no childs, so it should be
 
     glm::vec<3, uint32_t> center = cell | child_bit;
 
@@ -46,6 +45,7 @@ void recursive_integrate(const Ray &ray, const RayRange &range, const glm::vec<3
     axis[!gt01 +  gt12] = 1;
     axis[!gt02 + !gt12] = 2;
 
+#if 0
     glm::vec3 penter = ray.origin + ray.direction * range.min;
 
     glm::vec<3, uint32_t> child_cell {
@@ -53,6 +53,16 @@ void recursive_integrate(const Ray &ray, const RayRange &range, const glm::vec<3
       penter.y > center.y ? center.y : cell.y,
       penter.z > center.z ? center.z : cell.z
     };
+
+#else
+
+  glm::vec<3, uint32_t> child_cell {
+    ray.direction.x < 0.f ? center.x : cell.x,
+    ray.direction.y < 0.f ? center.y : cell.y,
+    ray.direction.z < 0.f ? center.z : cell.z
+  };
+
+#endif
 
     float tmin = range.min;
     for (uint8_t i = 0; i < 3; i++) {
@@ -110,67 +120,83 @@ void render(const BlockedVolume<T> &volume, const glm::mat4 &mv, uint32_t width,
 
       glm::vec4 dst(0.f, 0.f, 0.f, 1.f);
 
-      auto integrate = [&](float v0, float v1, float step) {
-        auto rgba = transfer_function(v0, v1);
+      auto integrate = [&](const glm::vec4 &rgba, float stepsize) {
+        float alpha = 1.f - std::exp(-rgba.a * stepsize);
 
-        if (rgba.a > 0.f) { // empty space skipping
-          float alpha = 1.f - std::exp(-rgba.a * step);
+        float coef = alpha * dst.a;
 
-          float coef = alpha * dst.a;
-
-          dst.r += rgba.r * coef;
-          dst.g += rgba.g * coef;
-          dst.b += rgba.b * coef;
-          dst.a *= 1.f - alpha;
-        }
+        dst.r += rgba.r * coef;
+        dst.g += rgba.g * coef;
+        dst.b += rgba.b * coef;
+        dst.a *= 1.f - alpha;
       };
 
       if (tmin < tmax) {
+
+        float t = tmin;
+        float next_t = tmin;
+        float prev_value = 0.f;
+
         recursive_integrate(ray, { tmin, tmax }, { 0, 0, 0 }, std::size(volume.info.layers) - 1, [&](const RayRange &range, const glm::vec<3, uint32_t> &cell, uint32_t layer) {
-          //cell in cannonical blocked volume space [0, 2^(num_layers - 1)]
-          //block in layer space [0, 2^(num_layers - layer - 1)]
+          if (next_t >= range.max) {
+            // The intersection is so small it can be skipped
+            return false;
+          }
+
           auto block = cell >> layer;
+
+          if (block.x >= volume.info.layers[layer].width_in_blocks
+           || block.y >= volume.info.layers[layer].height_in_blocks
+           || block.z >= volume.info.layers[layer].depth_in_blocks) {
+            // The block is outside the real volume
+            return false;
+          }
 
           const auto &node = volume.nodes[volume.info.node_handle(block.x, block.y, block.z, layer)];
 
-          if (node.min == node.max) { // fast integration
-            integrate(node.min, node.max, range.max - range.min);
-          }
-          else { // integration by sampling
+          auto node_rgba = transfer_function(node.min, node.max);
 
-            // dumb condition that causes the recursion to go all the way down.
-            // TODO do something elaborate here
+          if (node_rgba.a == 0.f) {
+            // node is empty with current transfer function, skip
+            return false;
+          }
+
+          if (node.min == node.max) {
+            // fast integration
+            integrate(transfer_function(node.min, prev_value), next_t - t); // finish previous step with block value
+            integrate(node_rgba, range.max - next_t); // integrate the rest of the block
+
+            prev_value = node.min;
+            t = range.max;
+            next_t = t + step;
+          }
+          else {
+            // integration by sampling
+
             if (layer) {
+              // dumb condition that causes the recursion to go all the way down.
+              // TODO do something elaborate here
               return true;
             }
 
-            float t = range.min;
-            float prev_value;
+            float to_layer_space = std::ldexp(float(BlockedVolume<T>::SUBVOLUME_SIDE), -layer);
 
-            // TODO move prev outside and initialize it somehow. Same with t;
+            auto cannonical_layer_origin = ray.origin * to_layer_space;
+            auto cannonical_layer_direction = ray.direction * to_layer_space;
 
-            // direction and everything is in cannonical BLOCKED volume space, but we need to step the position in cannocical volume space
+            auto offset = cannonical_layer_origin - glm::vec3(block * BlockedVolume<T>::SUBVOLUME_SIDE) - .5f;
 
-            {
-              glm::vec3 pos = (ray.origin + ray.direction * t) / float(1 << layer);
-              glm::vec3 in_block_pos = (pos - glm::vec3(block)) * float(BlockedVolume<T>::SUBVOLUME_SIDE) - .5f;
-              prev_value = volume.sample_block(node.block_handle, in_block_pos.x, in_block_pos.y, in_block_pos.z);
-            }
+            // direction and everything is in cannonical BLOCKED volume space, but we need to step the position in cannocical layer space
 
-            while (t < range.max) {
-              float next_step = std::min(step * (layer + 1), range.max - t);
-
-              t += next_step;
-
-              // fixme division
-              glm::vec3 pos = (ray.origin + ray.direction * t) / float(1 << layer);
-              glm::vec3 in_block_pos = (pos - glm::vec3(block)) * float(BlockedVolume<T>::SUBVOLUME_SIDE) - .5f;
-
+            while (next_t < range.max) {
+              glm::vec3 in_block_pos = cannonical_layer_direction * next_t + offset;
               float value = volume.sample_block(node.block_handle, in_block_pos.x, in_block_pos.y, in_block_pos.z);
 
-              integrate(value, prev_value, next_step);
+              integrate(transfer_function(value, prev_value), next_t - t);
 
               prev_value = value;
+              t = next_t;
+              next_t = t + step;
             }
           }
 
