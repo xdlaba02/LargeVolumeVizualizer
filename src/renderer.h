@@ -45,7 +45,7 @@ void recursive_integrate(const Ray &ray, const RayRange &range, const glm::vec<3
     axis[!gt01 +  gt12] = 1;
     axis[!gt02 + !gt12] = 2;
 
-#if 0
+#if 1
     glm::vec3 penter = ray.origin + ray.direction * range.min;
 
     glm::vec<3, uint32_t> child_cell {
@@ -94,8 +94,9 @@ void render(const BlockedVolume<T> &volume, const glm::mat4 &mv, uint32_t width,
   glm::vec3 origin = ray_transform * glm::vec4(0.f, 0.f, 0.f, 1.f);
 
   float yfov = glm::radians(yfov_degrees);
+
   float yfov_coef = std::tan(yfov / 2.f);
-  float xfov_coef = yfov * width / height;
+  float xfov_coef = yfov_coef * width / height;
 
   float width_coef_avg  = xfov_coef / width;
   float width_coef  = 2.f * width_coef_avg;
@@ -105,6 +106,7 @@ void render(const BlockedVolume<T> &volume, const glm::mat4 &mv, uint32_t width,
   float height_coef = 2.f * height_coef_avg;
   float height_shift = height_coef_avg - yfov_coef;
 
+  #pragma omp parallel for schedule(dynamic)
   for (uint32_t j = 0; j < height; j++) {
     float y = j * height_coef + height_shift;
 
@@ -116,7 +118,7 @@ void render(const BlockedVolume<T> &volume, const glm::mat4 &mv, uint32_t width,
       float tmin {};
       float tmax {};
 
-      intersect_aabb_ray(ray.origin, ray.direction_inverse, {}, size_in_blocks, tmin, tmax);
+      intersect_aabb_ray(ray.origin, ray.direction_inverse, {0, 0, 0}, { volume.info.layers[0].width_in_blocks, volume.info.layers[0].height_in_blocks, volume.info.layers[0].depth_in_blocks }, tmin, tmax);
 
       glm::vec4 dst(0.f, 0.f, 0.f, 1.f);
 
@@ -132,7 +134,6 @@ void render(const BlockedVolume<T> &volume, const glm::mat4 &mv, uint32_t width,
       };
 
       if (tmin < tmax) {
-
         float t = tmin;
         float next_t = tmin;
         float prev_value = 0.f;
@@ -173,13 +174,14 @@ void render(const BlockedVolume<T> &volume, const glm::mat4 &mv, uint32_t width,
           else {
             // integration by sampling
 
-            if (layer) {
+            if (layer > std::size(volume.info.layers) - 2) {
               // dumb condition that causes the recursion to go all the way down.
               // TODO do something elaborate here
               return true;
             }
 
             float to_layer_space = std::ldexp(float(BlockedVolume<T>::SUBVOLUME_SIDE), -layer);
+
 
             auto cannonical_layer_origin = ray.origin * to_layer_space;
             auto cannonical_layer_direction = ray.direction * to_layer_space;

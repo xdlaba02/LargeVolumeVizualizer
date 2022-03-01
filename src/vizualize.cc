@@ -41,7 +41,7 @@ int main(int argc, char *argv[]) {
   GLFW glfw(1920, 1080, "Volumetric Vizualizer");
 
   std::map<float, glm::vec3> color_map {
-    #if 0
+    #if 1
     {80.f,  {0.75f, 0.5f, 0.25f}},
     {82.f,  {1.00f, 1.0f, 0.85f}}
     #else
@@ -52,7 +52,7 @@ int main(int argc, char *argv[]) {
   };
 
   std::map<float, float> alpha_map {
-    #if 0
+    #if 1
     {40.f,  000.f},
     {60.f,  001.f},
     {63.f,  005.f},
@@ -175,11 +175,11 @@ int main(int argc, char *argv[]) {
 
     glm::mat4 view = glm::lookAt(camera_pos, camera_pos + camera_front, camera_up);
 
-    render(volume, model * view, glfw.width(), glfw.height(), 45.f, .001f, transfer_function, [&](uint32_t x, uint32_t y, const glm::vec4 &output) {
+    render(volume, view * model, glfw.width(), glfw.height(), 45.f, 1.f/160.f, transfer_function, [&](uint32_t x, uint32_t y, const glm::vec4 &output) {
       uint8_t *triplet = glfw.raster(x, y);
-      triplet[0] = output.r;
-      triplet[1] = output.g;
-      triplet[2] = output.b;
+      triplet[0] = output.r * 255.f;
+      triplet[1] = output.g * 255.f;
+      triplet[2] = output.b * 255.f;
     });
 
     glfw.swapBuffers();
