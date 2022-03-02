@@ -56,6 +56,9 @@ void recursive_integrate(const Ray &ray, const RayRange &range, const glm::vec<3
 
 #else
 
+  // TODO something more efficient here?
+
+  // FIXME this does not work at all
   glm::vec<3, uint32_t> child_cell {
     ray.direction.x < 0.f ? center.x : cell.x,
     ray.direction.y < 0.f ? center.y : cell.y,
@@ -72,7 +75,6 @@ void recursive_integrate(const Ray &ray, const RayRange &range, const glm::vec<3
         recursive_integrate(ray, { tmin, tmax }, child_cell, layer - 1, callback);
         tmin = tmax;
 
-        // TODO is this right?
         child_cell[axis[i]] ^= child_bit;
       }
     }
@@ -86,7 +88,7 @@ void recursive_integrate(const Ray &ray, const RayRange &range, const glm::vec<3
 template <typename T, typename TransferFunctionType, typename OutputFunctionType>
 void render(const BlockedVolume<T> &volume, const glm::mat4 &mv, uint32_t width, uint32_t height, float yfov_degrees, float step, const TransferFunctionType &transfer_function, const OutputFunctionType &output_function) {
 
-  glm::vec3 size_in_blocks = glm::vec3(1 << (std::size(volume.info.layers) - 1));
+  glm::vec3 size_in_blocks = { volume.info.layers[0].width_in_blocks, volume.info.layers[0].height_in_blocks, volume.info.layers[0].depth_in_blocks };
 
   // This transfroms ray from cannocical clip space to cannonical blocked volume space where volume is inside boundig box [0, 2^(num_layers - 1)]
   glm::mat4 ray_transform = glm::scale(glm::mat4(1.f), size_in_blocks) * glm::translate(glm::mat4(1.f), glm::vec3(0.5f, 0.5f, 0.5f)) * glm::inverse(mv);
@@ -118,7 +120,7 @@ void render(const BlockedVolume<T> &volume, const glm::mat4 &mv, uint32_t width,
       float tmin {};
       float tmax {};
 
-      intersect_aabb_ray(ray.origin, ray.direction_inverse, {0, 0, 0}, { volume.info.layers[0].width_in_blocks, volume.info.layers[0].height_in_blocks, volume.info.layers[0].depth_in_blocks }, tmin, tmax);
+      intersect_aabb_ray(ray.origin, ray.direction_inverse, {0, 0, 0}, size_in_blocks, tmin, tmax);
 
       glm::vec4 dst(0.f, 0.f, 0.f, 1.f);
 
@@ -136,7 +138,7 @@ void render(const BlockedVolume<T> &volume, const glm::mat4 &mv, uint32_t width,
       if (tmin < tmax) {
         float t = tmin;
         float next_t = tmin;
-        float prev_value = 0.f;
+        float value = 0.f;
 
         recursive_integrate(ray, { tmin, tmax }, { 0, 0, 0 }, std::size(volume.info.layers) - 1, [&](const RayRange &range, const glm::vec<3, uint32_t> &cell, uint32_t layer) {
           if (next_t >= range.max) {
@@ -164,39 +166,37 @@ void render(const BlockedVolume<T> &volume, const glm::mat4 &mv, uint32_t width,
 
           if (node.min == node.max) {
             // fast integration
-            integrate(transfer_function(node.min, prev_value), next_t - t); // finish previous step with block value
+            integrate(transfer_function(value, node.min), next_t - t); // finish previous step with block value
             integrate(node_rgba, range.max - next_t); // integrate the rest of the block
 
-            prev_value = node.min;
+            value = node.min;
             t = range.max;
             next_t = t + step;
           }
           else {
             // integration by sampling
 
-            if (layer > std::size(volume.info.layers) - 2) {
+            if (layer) {
               // dumb condition that causes the recursion to go all the way down.
               // TODO do something elaborate here
               return true;
             }
 
-            float to_layer_space = std::ldexp(float(BlockedVolume<T>::SUBVOLUME_SIDE), -layer);
-
-
-            auto cannonical_layer_origin = ray.origin * to_layer_space;
-            auto cannonical_layer_direction = ray.direction * to_layer_space;
-
-            auto offset = cannonical_layer_origin - glm::vec3(block * BlockedVolume<T>::SUBVOLUME_SIDE) - .5f;
-
-            // direction and everything is in cannonical BLOCKED volume space, but we need to step the position in cannocical layer space
-
             while (next_t < range.max) {
-              glm::vec3 in_block_pos = cannonical_layer_direction * next_t + offset;
-              float value = volume.sample_block(node.block_handle, in_block_pos.x, in_block_pos.y, in_block_pos.z);
+              glm::vec3 cell_pos = ray.origin + ray.direction * next_t;
 
-              integrate(transfer_function(value, prev_value), next_t - t);
+              glm::vec3 block_pos {
+                std::ldexp(cell_pos.x, -layer),
+                std::ldexp(cell_pos.y, -layer),
+                std::ldexp(cell_pos.z, -layer),
+              };
 
-              prev_value = value;
+              glm::vec3 in_block_pos = (block_pos - glm::vec3(block)) * float(BlockedVolume<T>::SUBVOLUME_SIDE) - 0.5f;
+              float next_value = volume.sample_block(node.block_handle, in_block_pos.x, in_block_pos.y, in_block_pos.z);
+
+              integrate(transfer_function(value, next_value), next_t - t);
+
+              value = next_value;
               t = next_t;
               next_t = t + step;
             }
