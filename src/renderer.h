@@ -20,9 +20,9 @@ struct RayRange {
 
 // Two instruction exp2 for my use-case.
 constexpr float approx_exp2(int32_t i) {
-  float num = 1.f;
-  reinterpret_cast<uint32_t &>(num) += i << 23;
-  return num;
+  union { float f = 1.f; int32_t i; } val;
+  val.i += i << 23; // reinterpres as int, add i to exponent
+  return val.f;
 }
 
 // Interactive isosurface ray tracing of large octree volumes
@@ -53,6 +53,7 @@ void ray_octree_traversal(const Ray &ray, const RayRange &range, const glm::vec3
     glm::vec3 opposite_cell = center;
 
     // TODO precompute?
+    // FIXME is this right?
     for (uint8_t i = 0; i < 3; i++) {
       if (ray.direction[i] < 0.f) {
         std::swap(child_cell[i], opposite_cell[i]);
@@ -69,6 +70,8 @@ void ray_octree_traversal(const Ray &ray, const RayRange &range, const glm::vec3
         tmin = tmax;
       }
 
+      // outside the condition because the way of swapping child cells by direction
+      // FIXME is this right?
       child_cell[axis[i]] = opposite_cell[axis[i]];
     }
 
@@ -108,18 +111,24 @@ glm::vec4 render(const BlockedVolume<T> &volume, const glm::vec3 &ray_origin, co
     ray_octree_traversal(ray, { tmin, tmax }, { 0.f, 0.f, 0.f }, 0, [&](const RayRange &range, const glm::vec3 &cell, uint32_t layer) {
       if (next_t >= range.max) {
         // The intersection is so small it can be skipped
-        return false;
+        //return false;
       }
 
       glm::vec3 block = cell * approx_exp2(layer);
 
       uint8_t layer_index = std::size(volume.info.layers) - 1 - layer;
 
-      if (block[0] >= volume.info.layers[layer_index].width_in_blocks
-       || block[1] >= volume.info.layers[layer_index].height_in_blocks
-       || block[2] >= volume.info.layers[layer_index].depth_in_blocks) {
-        // The block is outside the real volume
-        return false;
+      glm::vec3 layer_size {
+        volume.info.layers[layer_index].width_in_blocks,
+        volume.info.layers[layer_index].height_in_blocks,
+        volume.info.layers[layer_index].depth_in_blocks
+      };
+
+      for (uint8_t i = 0; i < 3; i++) {
+        if (block[i] >= layer_size[i]) {
+          // The block is outside the real volume
+          return false;
+        }
       }
 
       const auto &node = volume.nodes[volume.info.node_handle(block[0], block[1], block[2], layer_index)];
@@ -146,7 +155,7 @@ glm::vec4 render(const BlockedVolume<T> &volume, const glm::vec3 &ray_origin, co
         if (layer_index) {
           // dumb condition
           // TODO do something elaborate here
-          //return true;
+          return true;
         }
 
         while (next_t < range.max) {
@@ -155,8 +164,8 @@ glm::vec4 render(const BlockedVolume<T> &volume, const glm::vec3 &ray_origin, co
 
           glm::vec3 pos = ray.origin + ray.direction * next_t;
 
-          glm::vec3 in_block_denorm = (pos - cell) * approx_exp2(layer) * float(BlockedVolume<T>::SUBVOLUME_SIDE) - 0.5f;
-          float next_value = volume.sample_block(node.block_handle, in_block_denorm.x, in_block_denorm.y, in_block_denorm.z);
+          //glm::vec3 in_block_denorm = (pos - cell) * layer_size * float(BlockedVolume<T>::SUBVOLUME_SIDE) - 0.5f;
+          float next_value = volume.sample_volume(pos.x, pos.y, pos.z, layer_index);
 
           integrate(transfer_function(value, next_value), next_t - t);
 
