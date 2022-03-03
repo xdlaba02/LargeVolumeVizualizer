@@ -7,6 +7,7 @@
 #include "glfw.h"
 #include "simd.h"
 #include "intersection.h"
+#include "ray_generator.h"
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -175,12 +176,24 @@ int main(int argc, char *argv[]) {
 
     glm::mat4 view = glm::lookAt(camera_pos, camera_pos + camera_front, camera_up);
 
-    render(volume, view * model, glfw.width(), glfw.height(), 45.f, 1.f/160.f, transfer_function, [&](uint32_t x, uint32_t y, const glm::vec4 &output) {
-      uint8_t *triplet = glfw.raster(x, y);
-      triplet[0] = output.r * 255.f;
-      triplet[1] = output.g * 255.f;
-      triplet[2] = output.b * 255.f;
-    });
+    RayGenerator ray_generator(glfw.width(), glfw.height(), 45.f);
+
+    glm::mat4 ray_transform = glm::inverse(view * model);
+
+    glm::vec3 ray_origin = ray_transform * glm::vec4(0.f, 0.f, 0.f, 1.f);
+
+    //#pragma omp parallel for schedule(dynamic)
+    for (uint32_t y = 0; y < glfw.height(); y++) {
+      for (uint32_t x = 0; x < glfw.width(); x++) {
+        glm::vec3 ray_direction = ray_transform * ray_generator(x, y);
+
+        glm::vec4 output = render(volume, ray_origin, ray_direction, 0.01f, transfer_function);
+
+        glfw.raster(x, y)[0] = output.r * 255.f;
+        glfw.raster(x, y)[1] = output.g * 255.f;
+        glfw.raster(x, y)[2] = output.b * 255.f;
+      }
+    }
 
     glfw.swapBuffers();
     glfw.pollEvents();
