@@ -7,8 +7,10 @@
 #include <glm/gtc/matrix_inverse.hpp>
 
 #include <cstddef>
+#include <cstdint>
 
 #include <numeric>
+#include <array>
 
 struct RayRange {
   float min;
@@ -22,14 +24,21 @@ struct Ray {
   const glm::vec3 direction_inverse;
 };
 
+// Two instruction exp2 for my use-case.
+constexpr float approx_exp2(int32_t i) {
+  float num = 1.f;
+  reinterpret_cast<uint32_t &>(num) += i << 23;
+  return num;
+}
+
 // Interactive isosurface ray tracing of large octree volumes
 // https://www.researchgate.net/publication/310054812_Interactive_isosurface_ray_tracing_of_large_octree_volumes
 
 template <typename F>
-void recursive_integrate(const Ray &ray, const RayRange &range, const glm::vec3 &cell, uint32_t layer, const F &callback) {
+void ray_octree_traversal(const Ray &ray, const RayRange &range, const glm::vec3 &cell, uint32_t layer, const F &callback) {
   if (callback(range, cell, layer)) {
     // TODO precompute?
-    float child_size = std::exp2f(-layer - 1);
+    float child_size = approx_exp2(-layer - 1);
 
     glm::vec3 center = cell + child_size;
 
@@ -49,33 +58,30 @@ void recursive_integrate(const Ray &ray, const RayRange &range, const glm::vec3 
     // TODO something more efficient here? Comparing ray direction with zero does not work.
     glm::vec3 penter = ray.origin + ray.direction * range.min;
 
-    // TODO merge child_cell and opposite_cell and switching between them into something more semantic
-    glm::vec3 child_cell {
-      penter.x > center.x ? center.x : cell.x,
-      penter.y > center.y ? center.y : cell.y,
-      penter.z > center.z ? center.z : cell.z
-    };
+    glm::vec3 child_cell = cell;
+    glm::vec3 opposite_cell = center;
 
-    glm::vec3 opposite_cell {
-      penter.x > center.x ? cell.x : center.x,
-      penter.y > center.y ? cell.y : center.y,
-      penter.z > center.z ? cell.z : center.z
-    };
+    for (uint8_t i = 0; i < 3; i++) {
+      if (penter[i] > center[i]) {
+        std::swap(child_cell[i], opposite_cell[i]);
+      }
+    }
 
     float tmin = range.min;
+
     for (uint8_t i = 0; i < 3; i++) {
       float tmax = std::min(tcenter[axis[i]], range.max);
 
       if (tmin < tmax) {
-        recursive_integrate(ray, { tmin, tmax }, child_cell, layer + 1, callback);
+        ray_octree_traversal(ray, { tmin, tmax }, child_cell, layer + 1, callback);
         tmin = tmax;
-
         child_cell[axis[i]] = opposite_cell[axis[i]];
       }
+
     }
 
     if (tmin < range.max) {
-      recursive_integrate(ray, { tmin, range.max }, child_cell, layer + 1, callback);
+      ray_octree_traversal(ray, { tmin, range.max }, child_cell, layer + 1, callback);
     }
   }
 }
@@ -101,7 +107,7 @@ void render(const BlockedVolume<T> &volume, const glm::mat4 &mv, uint32_t width,
   float height_coef = 2.f * height_coef_avg;
   float height_shift = height_coef_avg - yfov_coef;
 
-  //#pragma omp parallel for schedule(dynamic)
+  #pragma omp parallel for schedule(dynamic)
   for (uint32_t j = 0; j < height; j++) {
     float y = j * height_coef + height_shift;
 
@@ -133,26 +139,24 @@ void render(const BlockedVolume<T> &volume, const glm::mat4 &mv, uint32_t width,
         float next_t = tmin;
         float value = 0.f;
 
-        recursive_integrate(ray, { tmin, tmax }, { 0.f, 0.f, 0.f }, 0, [&](const RayRange &range, const glm::vec3 &cell, uint32_t layer) {
+        ray_octree_traversal(ray, { tmin, tmax }, { 0.f, 0.f, 0.f }, 0, [&](const RayRange &range, const glm::vec3 &cell, uint32_t layer) {
           if (next_t >= range.max) {
             // The intersection is so small it can be skipped
             return false;
           }
 
-          glm::vec3 block {
-            std::ldexp(cell.x, layer),
-            std::ldexp(cell.y, layer),
-            std::ldexp(cell.z, layer)
-          };
+          glm::vec3 block = cell * approx_exp2(layer);
 
-          if (block[0] >= volume.info.layers[layer].width_in_blocks
-           || block[1] >= volume.info.layers[layer].height_in_blocks
-           || block[2] >= volume.info.layers[layer].depth_in_blocks) {
+          uint8_t layer_index = std::size(volume.info.layers) - 1 - layer;
+
+          if (block[0] >= volume.info.layers[layer_index].width_in_blocks
+           || block[1] >= volume.info.layers[layer_index].height_in_blocks
+           || block[2] >= volume.info.layers[layer_index].depth_in_blocks) {
             // The block is outside the real volume
             return false;
           }
 
-          const auto &node = volume.nodes[volume.info.node_handle(block[0], block[1], block[2], std::size(volume.info.layers) - 1 - layer)];
+          const auto &node = volume.nodes[volume.info.node_handle(block[0], block[1], block[2], layer_index)];
 
           auto node_rgba = transfer_function(node.min, node.max);
 
@@ -173,19 +177,18 @@ void render(const BlockedVolume<T> &volume, const glm::mat4 &mv, uint32_t width,
           else {
             // integration by sampling
 
-            if (layer < std::size(volume.info.layers) - 1) {
-              // dumb condition that causes the recursion to go all the way down.
+            if (layer_index) {
+              // dumb condition
               // TODO do something elaborate here
               //return true;
             }
 
-            glm::vec3 block_start = block * float(BlockedVolume<T>::SUBVOLUME_SIDE) + 0.5f;
-
             while (next_t < range.max) {
-              glm::vec3 pos = ray.origin + ray.direction * next_t;
-              glm::vec3 denorm = pos * std::exp2f(std::size(volume.info.layers) - 1 - layer);
+              // 0..1 is in octree space. Convert to volume space (which is subset)
 
-              glm::vec3 in_block_denorm = denorm - block_start;
+              glm::vec3 pos = ray.origin + ray.direction * next_t;
+
+              glm::vec3 in_block_denorm = (pos - cell) * approx_exp2(layer) * float(BlockedVolume<T>::SUBVOLUME_SIDE) - 0.5f;
               float next_value = volume.sample_block(node.block_handle, in_block_denorm.x, in_block_denorm.y, in_block_denorm.z);
 
               integrate(transfer_function(value, next_value), next_t - t);
