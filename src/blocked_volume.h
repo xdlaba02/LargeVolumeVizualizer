@@ -248,7 +248,7 @@ public:
     return accs[0][0];
   }
 
-  // expects coordinates from interval <-.5f, SUBVOLUME_SIDE - .5f>
+  // expects coordinates from interval <-.5f, BLOCK_SIDE - .5f>
   // can safely handle values from interval (-1.f, BLOCK_SIDE) due to padding and truncation used
   inline simd::float_v sample_block(const std::array<uint64_t, simd::len> &block_handle, const simd::float_v &denorm_x, const simd::float_v &denorm_y, const simd::float_v &denorm_z, const simd::float_m &mask) const {
     simd::uint32_v denorm_x_low = denorm_x;

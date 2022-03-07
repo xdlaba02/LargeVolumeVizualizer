@@ -87,7 +87,10 @@ int main(int argc, char *argv[]) {
   constexpr glm::vec3 camera_up = glm::vec3(0.0f, 1.0f, 0.0f);
 
   glm::vec3 volume_pos   = glm::vec3(0.0f, 0.0f, 0.0f);
-  glm::vec3 volume_scale = glm::vec3(1.0f, 1.0f, 1.0f);
+
+  glm::vec3 voxel_size = glm::vec3(2.f / 128.f, 1.0f / 256.f, 1.0f / 256.f);
+  glm::vec3 volume_voxels = { volume.info.layers[0].width, volume.info.layers[0].height, volume.info.layers[0].depth };
+  glm::vec3 volume_size = voxel_size * volume_voxels;
 
   float t = 0.f;
   while (!glfw.shouldClose()) {
@@ -151,43 +154,29 @@ int main(int argc, char *argv[]) {
       if (glfw.getKey(GLFW_KEY_E) == GLFW_PRESS) {
         volume_pos.x += speed;
       }
-
-      if (glfw.getKey(GLFW_KEY_UP) == GLFW_PRESS) {
-        volume_scale += 0.1 * delta;
-      }
-
-      if (glfw.getKey(GLFW_KEY_DOWN) == GLFW_PRESS) {
-        volume_scale -= 0.1 * delta;
-      }
-
-      if (glfw.getKey(GLFW_KEY_RIGHT) == GLFW_PRESS) {
-        volume_scale.x += 0.1 * delta;
-      }
-
-      if (glfw.getKey(GLFW_KEY_LEFT) == GLFW_PRESS) {
-        volume_scale.x -= 0.1 * delta;
-      }
     }
 
+    // TODO hide transforms into object and camera class
+    // by default, the volume is rendered in the interval [0, 1] // TODO is this right? account for the logarithmic traversal, test with irregular data
     glm::mat4 model = glm::translate(glm::mat4(1.f), volume_pos)
                     * glm::rotate(glm::mat4(1.f), t, glm::vec3(0.f, 1.f, 0.f))
                     * glm::rotate(glm::mat4(1.f), glm::radians(90.f), glm::vec3(1.f, 0.f, 0.f))
-                    * glm::scale(glm::mat4(1.f), volume_scale);
+                    * glm::scale(glm::mat4(1.f), volume_size);
 
     glm::mat4 view = glm::lookAt(camera_pos, camera_pos + camera_front, camera_up);
-
-    RayGenerator ray_generator(glfw.width(), glfw.height(), 45.f);
 
     glm::mat4 ray_transform = glm::inverse(view * model);
 
     glm::vec3 ray_origin = ray_transform * glm::vec4(0.f, 0.f, 0.f, 1.f);
 
-    //#pragma omp parallel for schedule(dynamic)
+    RayGenerator ray_generator(glfw.width(), glfw.height(), 45.f);
+
+    #pragma omp parallel for schedule(dynamic)
     for (uint32_t y = 0; y < glfw.height(); y++) {
       for (uint32_t x = 0; x < glfw.width(); x++) {
         glm::vec3 ray_direction = ray_transform * ray_generator(x, y);
 
-        glm::vec4 output = render(volume, ray_origin, ray_direction, 0.01f, transfer_function);
+        glm::vec4 output = render(volume, { ray_origin, ray_direction }, 0.01f, transfer_function);
 
         glfw.raster(x, y)[0] = output.r * 255.f;
         glfw.raster(x, y)[1] = output.g * 255.f;

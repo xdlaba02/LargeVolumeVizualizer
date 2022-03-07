@@ -28,6 +28,7 @@ constexpr float approx_exp2(int32_t i) {
 // Interactive isosurface ray tracing of large octree volumes
 // https://www.researchgate.net/publication/310054812_Interactive_isosurface_ray_tracing_of_large_octree_volumes
 
+// TODO TEST this procedure, there is a bug! probably
 template <typename F>
 void ray_octree_traversal(const Ray &ray, const RayRange &range, const glm::vec3 &cell, uint32_t layer, const F &callback) {
   if (callback(range, cell, layer)) {
@@ -53,7 +54,6 @@ void ray_octree_traversal(const Ray &ray, const RayRange &range, const glm::vec3
     glm::vec3 opposite_cell = center;
 
     // TODO precompute?
-    // FIXME is this right?
     for (uint8_t i = 0; i < 3; i++) {
       if (ray.direction[i] < 0.f) {
         std::swap(child_cell[i], opposite_cell[i]);
@@ -71,7 +71,6 @@ void ray_octree_traversal(const Ray &ray, const RayRange &range, const glm::vec3
       }
 
       // outside the condition because the way of swapping child cells by direction
-      // FIXME is this right?
       child_cell[axis[i]] = opposite_cell[axis[i]];
     }
 
@@ -82,9 +81,7 @@ void ray_octree_traversal(const Ray &ray, const RayRange &range, const glm::vec3
 }
 
 template <typename T, typename TransferFunctionType>
-glm::vec4 render(const BlockedVolume<T> &volume, const glm::vec3 &ray_origin, const glm::vec3 &ray_direction, float step, const TransferFunctionType &transfer_function) {
-  Ray ray(ray_origin + 0.5f, ray_direction);
-
+glm::vec4 render(const BlockedVolume<T> &volume, const Ray &ray, float step, const TransferFunctionType &transfer_function) {
   float tmin {};
   float tmax {};
 
@@ -111,10 +108,8 @@ glm::vec4 render(const BlockedVolume<T> &volume, const glm::vec3 &ray_origin, co
     ray_octree_traversal(ray, { tmin, tmax }, { 0.f, 0.f, 0.f }, 0, [&](const RayRange &range, const glm::vec3 &cell, uint32_t layer) {
       if (next_t >= range.max) {
         // The intersection is so small it can be skipped
-        //return false;
+        return false;
       }
-
-      glm::vec3 block = cell * approx_exp2(layer);
 
       uint8_t layer_index = std::size(volume.info.layers) - 1 - layer;
 
@@ -124,55 +119,56 @@ glm::vec4 render(const BlockedVolume<T> &volume, const glm::vec3 &ray_origin, co
         volume.info.layers[layer_index].depth_in_blocks
       };
 
+      glm::vec3 block = cell * approx_exp2(layer);
+
       for (uint8_t i = 0; i < 3; i++) {
         if (block[i] >= layer_size[i]) {
-          // The block is outside the real volume
+          t = range.max;
+          next_t = range.max;
           return false;
         }
       }
 
       const auto &node = volume.nodes[volume.info.node_handle(block[0], block[1], block[2], layer_index)];
 
-      auto node_rgba = transfer_function(node.min, node.max);
+      auto rgba = transfer_function(node.min, node.max);
 
-      if (node_rgba.a == 0.f) {
-        // node is empty with current transfer function, skip
+      if (rgba.a == 0.f) {
+        integrate(transfer_function(value, node.min), next_t - t); // finish previous step with block value
+        t = range.max;
+        next_t = range.max;
         return false;
       }
 
       if (node.min == node.max) {
         // fast integration
         integrate(transfer_function(value, node.min), next_t - t); // finish previous step with block value
-        integrate(node_rgba, range.max - next_t); // integrate the rest of the block
-
+        integrate(rgba, range.max - next_t); // integrate the rest of the block
         value = node.min;
         t = range.max;
         next_t = t + step;
+        return false;
       }
-      else {
-        // integration by sampling
+      // integration by sampling
 
-        if (layer_index) {
-          // dumb condition
-          // TODO do something elaborate here
-          return true;
-        }
+      if (layer_index) {
+        // dumb condition
+        // TODO do something elaborate here
+        return true;
+      }
 
-        while (next_t < range.max) {
-          // FIXME something weird is happening here
-          // 0..1 is in octree space. Convert to volume space (which is subset)
+      while (next_t < range.max) { // TODO perform checks again with position and account for .5
+        glm::vec3 pos = ray.origin + ray.direction * next_t;
 
-          glm::vec3 pos = ray.origin + ray.direction * next_t;
+        glm::vec3 in_block = (pos - cell) * approx_exp2(layer) * float(BlockedVolume<T>::BLOCK_SIDE) - .5f; // FIXME handling the block edges does not work
 
-          //glm::vec3 in_block_denorm = (pos - cell) * layer_size * float(BlockedVolume<T>::SUBVOLUME_SIDE) - 0.5f;
-          float next_value = volume.sample_volume(pos.x, pos.y, pos.z, layer_index);
+        float next_value = volume.sample_block(node.block_handle, in_block.x, in_block.y, in_block.z);
 
-          integrate(transfer_function(value, next_value), next_t - t);
+        integrate(transfer_function(value, next_value), next_t - t);
 
-          value = next_value;
-          t = next_t;
-          next_t = t + step;
-        }
+        value = next_value;
+        t = next_t;
+        next_t = t + step;
       }
 
       return false;
