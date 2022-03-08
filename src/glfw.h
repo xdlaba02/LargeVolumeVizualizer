@@ -5,6 +5,7 @@
 #include <cstdint>
 
 #include <vector>
+#include <iostream>
 
 class GLFW {
 public:
@@ -40,7 +41,7 @@ public:
   };
 
   void swapBuffers() {
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glClear(GL_COLOR_BUFFER_BIT);
     glDrawPixels(m_width, m_height, GL_RGB, GL_UNSIGNED_BYTE, m_raster.data());
     glfwSwapBuffers(m_window);
   }
@@ -64,12 +65,8 @@ public:
     glfwSetWindowShouldClose(m_window, shouldClose);
   }
 
-  uint8_t *raster() {
-    return m_raster.data();
-  }
-
-  uint8_t *raster(uint32_t x, uint32_t y) {
-    return &m_raster[y * m_width * 3 + x * 3];
+  uint8_t &raster(uint32_t x, uint32_t y, uint8_t c) {
+    return m_raster[y * m_width * 3 + x * 3 + c];
   }
 
   uint32_t width() const { return m_width; }

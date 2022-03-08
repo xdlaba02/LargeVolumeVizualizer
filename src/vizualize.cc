@@ -39,7 +39,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  GLFW glfw(1920, 1080, "Volumetric Vizualizer");
+  GLFW window(1920, 1080, "Volumetric Vizualizer");
 
   std::map<float, glm::vec3> color_map {
     #if 1
@@ -78,7 +78,7 @@ int main(int argc, char *argv[]) {
   auto prev_time = std::chrono::steady_clock::now();
 
   glm::vec2 prev_pos;
-  glfw.getCursor(prev_pos.x, prev_pos.y);
+  window.getCursor(prev_pos.x, prev_pos.y);
 
   float yaw = -90;
   float pitch = 0;
@@ -93,7 +93,7 @@ int main(int argc, char *argv[]) {
   glm::vec3 volume_size = voxel_size * volume_voxels;
 
   float t = 0.f;
-  while (!glfw.shouldClose()) {
+  while (!window.shouldClose()) {
 
     auto time = std::chrono::steady_clock::now();
     float delta = std::chrono::duration_cast<std::chrono::milliseconds>(time - prev_time).count() / 1000.f;
@@ -105,7 +105,7 @@ int main(int argc, char *argv[]) {
     {
       glm::vec2 pos;
 
-      glfw.getCursor(pos.x, pos.y);
+      window.getCursor(pos.x, pos.y);
 
       constexpr float sensitivity = 0.1f;
       glm::vec2 offset = (pos - prev_pos) * sensitivity;
@@ -127,31 +127,31 @@ int main(int argc, char *argv[]) {
     {
       const float speed = 1.f * delta;
 
-      if (glfw.getKey(GLFW_KEY_ESCAPE) == GLFW_PRESS) {
-        glfw.shouldClose(true);
+      if (window.getKey(GLFW_KEY_ESCAPE) == GLFW_PRESS) {
+        window.shouldClose(true);
       }
 
-      if (glfw.getKey(GLFW_KEY_W) == GLFW_PRESS) {
+      if (window.getKey(GLFW_KEY_W) == GLFW_PRESS) {
         camera_pos += speed * camera_front;
       }
 
-      if (glfw.getKey(GLFW_KEY_S) == GLFW_PRESS) {
+      if (window.getKey(GLFW_KEY_S) == GLFW_PRESS) {
         camera_pos -= speed * camera_front;
       }
 
-      if (glfw.getKey(GLFW_KEY_A) == GLFW_PRESS) {
+      if (window.getKey(GLFW_KEY_A) == GLFW_PRESS) {
         camera_pos -= glm::normalize(glm::cross(camera_front, camera_up)) * speed;
       }
 
-      if (glfw.getKey(GLFW_KEY_D) == GLFW_PRESS) {
+      if (window.getKey(GLFW_KEY_D) == GLFW_PRESS) {
         camera_pos += glm::normalize(glm::cross(camera_front, camera_up)) * speed;
       }
 
-      if (glfw.getKey(GLFW_KEY_Q) == GLFW_PRESS) {
+      if (window.getKey(GLFW_KEY_Q) == GLFW_PRESS) {
         volume_pos.x -= speed;
       }
 
-      if (glfw.getKey(GLFW_KEY_E) == GLFW_PRESS) {
+      if (window.getKey(GLFW_KEY_E) == GLFW_PRESS) {
         volume_pos.x += speed;
       }
     }
@@ -169,22 +169,22 @@ int main(int argc, char *argv[]) {
 
     glm::vec3 ray_origin = ray_transform * glm::vec4(0.f, 0.f, 0.f, 1.f);
 
-    RayGenerator ray_generator(glfw.width(), glfw.height(), 45.f);
+    RayGenerator ray_generator(window.width(), window.height(), 45.f);
 
     #pragma omp parallel for schedule(dynamic)
-    for (uint32_t y = 0; y < glfw.height(); y++) {
-      for (uint32_t x = 0; x < glfw.width(); x++) {
+    for (uint32_t y = 0; y < window.height(); y++) {
+      for (uint32_t x = 0; x < window.width(); x++) {
         glm::vec3 ray_direction = ray_transform * ray_generator(x, y);
 
-        glm::vec4 output = render(volume, { ray_origin, ray_direction }, 0.01f, transfer_function);
+        glm::vec4 output = render(volume, { ray_origin, ray_direction }, 0.002f, transfer_function);
 
-        glfw.raster(x, y)[0] = output.r * 255.f;
-        glfw.raster(x, y)[1] = output.g * 255.f;
-        glfw.raster(x, y)[2] = output.b * 255.f;
+        window.raster(x, y, 0) = output.r * 255.f;
+        window.raster(x, y, 1) = output.g * 255.f;
+        window.raster(x, y, 2) = output.b * 255.f;
       }
     }
 
-    glfw.swapBuffers();
-    glfw.pollEvents();
+    window.swapBuffers();
+    window.pollEvents();
   }
 }

@@ -80,6 +80,17 @@ void ray_octree_traversal(const Ray &ray, const RayRange &range, const glm::vec3
   }
 }
 
+void integrate(const glm::vec4 &src, glm::vec4 &dst, float stepsize) {
+  float alpha = 1.f - std::exp(-src.a * stepsize);
+
+  float coef = alpha * dst.a;
+
+  dst.r += src.r * coef;
+  dst.g += src.g * coef;
+  dst.b += src.b * coef;
+  dst.a *= 1.f - alpha;
+};
+
 template <typename T, typename TransferFunctionType>
 glm::vec4 render(const BlockedVolume<T> &volume, const Ray &ray, float step, const TransferFunctionType &transfer_function) {
   float tmin {};
@@ -89,25 +100,20 @@ glm::vec4 render(const BlockedVolume<T> &volume, const Ray &ray, float step, con
 
   glm::vec4 dst(0.f, 0.f, 0.f, 1.f);
 
-  auto integrate = [&](const glm::vec4 &rgba, float stepsize) {
-    float alpha = 1.f - std::exp(-rgba.a * stepsize);
-
-    float coef = alpha * dst.a;
-
-    dst.r += rgba.r * coef;
-    dst.g += rgba.g * coef;
-    dst.b += rgba.b * coef;
-    dst.a *= 1.f - alpha;
-  };
-
   if (tmin < tmax) {
     float t = tmin;
     float next_t = tmin;
     float value = 0.f;
 
     ray_octree_traversal(ray, { tmin, tmax }, { 0.f, 0.f, 0.f }, 0, [&](const RayRange &range, const glm::vec3 &cell, uint32_t layer) {
+
+      // Early ray termination
+      if (dst.a < 0.01f) {
+        return false;
+      }
+
+      // Next step does not intersect the block
       if (next_t >= range.max) {
-        // The intersection is so small it can be skipped
         return false;
       }
 
@@ -122,6 +128,7 @@ glm::vec4 render(const BlockedVolume<T> &volume, const Ray &ray, float step, con
       glm::vec3 block = cell * approx_exp2(layer);
 
       for (uint8_t i = 0; i < 3; i++) {
+        // Octree block is outside the real volume
         if (block[i] >= layer_size[i]) {
           t = range.max;
           next_t = range.max;
@@ -133,38 +140,38 @@ glm::vec4 render(const BlockedVolume<T> &volume, const Ray &ray, float step, con
 
       auto rgba = transfer_function(node.min, node.max);
 
+      // Empty space skipping
       if (rgba.a == 0.f) {
-        integrate(transfer_function(value, node.min), next_t - t); // finish previous step with block value
+        integrate(transfer_function(value, node.min), dst, next_t - t); // finish previous step with block value
         t = range.max;
         next_t = range.max;
         return false;
       }
 
+      // Fast integration of uniform space
       if (node.min == node.max) {
-        // fast integration
-        integrate(transfer_function(value, node.min), next_t - t); // finish previous step with block value
-        integrate(rgba, range.max - next_t); // integrate the rest of the block
+        integrate(transfer_function(value, node.min), dst, next_t - t); // finish previous step with block value
+        integrate(rgba, dst, range.max - next_t); // integrate the rest of the block
         value = node.min;
         t = range.max;
         next_t = t + step;
         return false;
       }
-      // integration by sampling
 
-      if (layer_index) {
-        // dumb condition
-        // TODO do something elaborate here
+      // Recurse condition
+      if (layer_index > 3) {
         return true;
       }
 
-      while (next_t < range.max) { // TODO perform checks again with position and account for .5
+      // Laplacian integration
+      while (next_t < range.max) {
         glm::vec3 pos = ray.origin + ray.direction * next_t;
 
-        glm::vec3 in_block = (pos - cell) * approx_exp2(layer) * float(BlockedVolume<T>::BLOCK_SIDE) - .5f; // FIXME handling the block edges does not work
+        glm::vec3 in_block = (pos - cell) * approx_exp2(layer) * float(BlockedVolume<T>::SUBVOLUME_SIDE);
 
         float next_value = volume.sample_block(node.block_handle, in_block.x, in_block.y, in_block.z);
 
-        integrate(transfer_function(value, next_value), next_t - t);
+        integrate(transfer_function(value, next_value), dst, next_t - t);
 
         value = next_value;
         t = next_t;
