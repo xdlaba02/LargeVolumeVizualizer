@@ -1,5 +1,6 @@
 
-#include "blocked_volume.h"
+#include "tree_volume/tree_volume.h"
+#include "tree_volume/sampler.h"
 #include "intersection.h"
 #include "ray.h"
 
@@ -99,7 +100,7 @@ void integrate(const glm::vec4 &src, glm::vec4 &dst, float stepsize) {
 };
 
 template <typename T, typename TransferFunctionType>
-glm::vec4 render(const BlockedVolume<T> &volume, const Ray &ray, float step, const TransferFunctionType &transfer_function) {
+glm::vec4 render(const TreeVolume<T> &volume, const Ray &ray, float step, const TransferFunctionType &transfer_function) {
   float tmin {};
   float tmax {};
 
@@ -174,9 +175,9 @@ glm::vec4 render(const BlockedVolume<T> &volume, const Ray &ray, float step, con
       while (slab_end_t < range.max) {
         glm::vec3 pos = ray.origin + ray.direction * slab_end_t;
 
-        glm::vec3 in_block = (pos - cell) * approx_exp2(layer) * float(BlockedVolume<T>::SUBVOLUME_SIDE);
+        glm::vec3 in_block = (pos - cell) * approx_exp2(layer) * float(TreeVolume<T>::SUBVOLUME_SIDE);
 
-        float slab_end_value = volume.sample_block(node.block_handle, in_block.x, in_block.y, in_block.z);
+        float slab_end_value = sample_block(volume, node.block_handle, in_block.x, in_block.y, in_block.z);
 
         integrate(transfer_function(slab_start_value, slab_end_value), dst, slab_end_t - slab_start_t);
 

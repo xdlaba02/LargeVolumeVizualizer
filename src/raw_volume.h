@@ -21,10 +21,12 @@ public:
       m_size_bytes(width * height * depth * sizeof(T)),
       m_file(file_name, 0, m_size_bytes, MappedFile::READ, MappedFile::SHARED)
   {
+    if (!m_file) {
+      throw std::runtime_error(std::string("Unable to open '") + file_name + "'!");
+    }
+
     m_data  = reinterpret_cast<const LE<T> *>(m_file.data());
   }
-
-  operator bool() const { return m_file; }
 
   simd::float_v samples(simd::float_v xs, simd::float_v ys, simd::float_v zs, simd::float_m mask) {
     simd::uint32_v pix_xs = xs;

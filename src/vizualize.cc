@@ -1,6 +1,6 @@
 
+#include "tree_volume/tree_volume.h"
 #include "renderer.h"
-#include "blocked_volume.h"
 #include "linear_gradient.h"
 #include "preintegrated_transfer_function.h"
 #include "vizualize_args.h"
@@ -32,12 +32,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  BlockedVolume<uint8_t> volume(processed_volume, processed_metadata, width, height, depth);
-
-  if (!volume) {
-    std::cerr << "ERROR: Unable to open volume!\n";
-    return 1;
-  }
+  TreeVolume<uint8_t> volume(processed_volume, processed_metadata, width, height, depth);
 
   std::map<float, glm::vec3> color_map {
     #if 1

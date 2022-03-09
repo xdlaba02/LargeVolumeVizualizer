@@ -100,7 +100,7 @@ private:
 
     GLFW() {
       if (!glfwInit()) {
-        throw std::runtime_error("Unable to init glfw!");
+        throw std::runtime_error("Unable to initialize GLFW!");
       }
     }
 };
