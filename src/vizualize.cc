@@ -39,8 +39,6 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  GLFW window(1920, 1080, "Volumetric Vizualizer");
-
   std::map<float, glm::vec3> color_map {
     #if 1
     {80.f,  {0.75f, 0.5f, 0.25f}},
@@ -74,6 +72,8 @@ int main(int argc, char *argv[]) {
   auto transfer_function = [&](float v0, float v1) {
     return glm::vec4(preintegrated_r(v0, v1), preintegrated_g(v0, v1), preintegrated_b(v0, v1), preintegrated_a(v0, v1));
   };
+
+  GLFW::Window window(1920, 1080, "Volumetric Vizualizer");
 
   auto prev_time = std::chrono::steady_clock::now();
 
