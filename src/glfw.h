@@ -80,7 +80,6 @@ public:
   GLFW(const GLFW&) = delete;
   GLFW &operator=(const GLFW&) = delete;
 
-
   ~GLFW() {
     glfwTerminate();
   }

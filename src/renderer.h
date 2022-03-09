@@ -104,7 +104,7 @@ glm::vec4 render(const BlockedVolume<T> &volume, const Ray &ray, float step, con
   float tmax {};
 
   // TODO intersection with filled part only
-  intersect_aabb_ray(ray.origin, ray.direction_inverse, {0.f, 0.f, 0.f}, {1.f, 1.f, 1.f}, tmin, tmax);
+  intersect_aabb_ray(ray.origin, ray.direction_inverse, {0.f, 0.f, 0.f}, { volume.info.width_frac, volume.info.height_frac, volume.info.depth_frac}, tmin, tmax);
 
   glm::vec4 dst(0.f, 0.f, 0.f, 1.f);
 
@@ -129,21 +129,14 @@ glm::vec4 render(const BlockedVolume<T> &volume, const Ray &ray, float step, con
 
       uint8_t layer_index = std::size(volume.info.layers) - 1 - layer;
 
-      glm::vec3 layer_size {
-        volume.info.layers[layer_index].width_in_blocks,
-        volume.info.layers[layer_index].height_in_blocks,
-        volume.info.layers[layer_index].depth_in_blocks
-      };
-
       glm::vec3 block = cell * approx_exp2(layer);
 
-      for (uint8_t i = 0; i < 3; i++) {
-        // Octree block is outside the real volume
-        if (block[i] >= layer_size[i]) {
-          slab_start_t = range.max;
-          slab_end_t = range.max;
-          return false;
-        }
+      if (block.x >= volume.info.layers[layer_index].width_in_blocks
+      || (block.y >= volume.info.layers[layer_index].height_in_blocks)
+      || (block.z >= volume.info.layers[layer_index].depth_in_blocks)) {
+        slab_start_t = range.max;
+        slab_end_t = range.max;
+        return false;
       }
 
       const auto &node = volume.nodes[volume.info.node_handle(block[0], block[1], block[2], layer_index)];
@@ -173,11 +166,11 @@ glm::vec4 render(const BlockedVolume<T> &volume, const Ray &ray, float step, con
       }
 
       // Recurse condition
-      if (layer_index > 0) {
+      if (layer_index > 3) {
         return true;
       }
 
-      // Laplacian integration
+      // Numeric integration
       while (slab_end_t < range.max) {
         glm::vec3 pos = ray.origin + ray.direction * slab_end_t;
 

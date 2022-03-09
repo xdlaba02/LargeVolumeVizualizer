@@ -27,19 +27,12 @@ public:
 
   struct Info {
     struct Layer {
-      Layer(uint32_t width, uint32_t height, uint32_t depth):
-        width(width),
-        height(height),
-        depth(depth),
-        width_in_blocks((width  + SUBVOLUME_SIDE - 1) / SUBVOLUME_SIDE),
-        height_in_blocks((height + SUBVOLUME_SIDE - 1) / SUBVOLUME_SIDE),
-        depth_in_blocks((depth  + SUBVOLUME_SIDE - 1) / SUBVOLUME_SIDE),
+      Layer(uint32_t width_in_blocks, uint32_t height_in_blocks, uint32_t depth_in_blocks):
+        width_in_blocks(width_in_blocks),
+        height_in_blocks(height_in_blocks),
+        depth_in_blocks(depth_in_blocks),
         stride_in_blocks(width_in_blocks * height_in_blocks),
         size_in_blocks(stride_in_blocks * depth_in_blocks) {}
-
-      uint32_t width;
-      uint32_t height;
-      uint32_t depth;
 
       uint32_t width_in_blocks;
       uint32_t height_in_blocks;
@@ -57,18 +50,29 @@ public:
     {
         size_in_blocks = 0;
 
-        while (width > SUBVOLUME_SIDE || height > SUBVOLUME_SIDE || depth > SUBVOLUME_SIDE) {
-          layers.emplace_back(width, height, depth);
+        uint32_t width_in_blocks  = (width  + SUBVOLUME_SIDE - 1) / SUBVOLUME_SIDE;
+        uint32_t height_in_blocks = (height + SUBVOLUME_SIDE - 1) / SUBVOLUME_SIDE;
+        uint32_t depth_in_blocks  = (depth  + SUBVOLUME_SIDE - 1) / SUBVOLUME_SIDE;
+
+        while (width_in_blocks > 1 || height_in_blocks > 1 || depth_in_blocks > 1) {
+          layers.emplace_back(width_in_blocks, height_in_blocks, depth_in_blocks);
           layer_offsets.push_back(size_in_blocks);
           size_in_blocks += layers.back().size_in_blocks;
 
-          ++width  >>= 1;
-          ++height >>= 1;
-          ++depth  >>= 1;
+          ++width_in_blocks  >>= 1;
+          ++height_in_blocks >>= 1;
+          ++depth_in_blocks  >>= 1;
         }
 
         layers.emplace_back(width, height, depth);
         layer_offsets.push_back(size_in_blocks);
+
+        float octree_size = (1 << (std::size(layers) - 1)) * SUBVOLUME_SIDE;
+
+        width_frac = width   / octree_size;
+        height_frac = height / octree_size;
+        depth_frac = depth   / octree_size;
+
         size_in_blocks += layers.back().size_in_blocks;
     }
 
@@ -78,6 +82,11 @@ public:
 
     std::vector<Layer> layers;
     std::vector<uint64_t> layer_offsets;
+
+    float width_frac;
+    float height_frac;
+    float depth_frac;
+
     uint64_t size_in_blocks;
   };
 
@@ -188,8 +197,8 @@ public:
     return samples;
   }
 
-  // expects coordinates from interval <-.5f, BLOCK_SIDE - .5f>
-  // can safely handle values from interval (-1.f, BLOCK_SIDE) due to truncation used
+  // expects coordinates from interval <-.5f, SUBVOLUME_SIDE - .5f>
+  // can safely handle values from interval (-1.f, SUBVOLUME_SIDE) due to truncation used
   inline float sample_block(uint64_t block_handle, float denorm_x, float denorm_y, float denorm_z) const {
     uint32_t denorm_x_low = denorm_x;
     uint32_t denorm_y_low = denorm_y;
@@ -248,8 +257,8 @@ public:
     return accs[0][0];
   }
 
-  // expects coordinates from interval <-.5f, BLOCK_SIDE - .5f>
-  // can safely handle values from interval (-1.f, BLOCK_SIDE) due to padding and truncation used
+  // expects coordinates from interval <-.5f, SUBVOLUME_SIDE - .5f>
+  // can safely handle values from interval (-1.f, SUBVOLUME_SIDE) due to padding and truncation used
   inline simd::float_v sample_block(const std::array<uint64_t, simd::len> &block_handle, const simd::float_v &denorm_x, const simd::float_v &denorm_y, const simd::float_v &denorm_z, const simd::float_m &mask) const {
     simd::uint32_v denorm_x_low = denorm_x;
     simd::uint32_v denorm_y_low = denorm_y;

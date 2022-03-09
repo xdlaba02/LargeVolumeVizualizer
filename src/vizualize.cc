@@ -88,9 +88,7 @@ int main(int argc, char *argv[]) {
 
   glm::vec3 volume_pos   = glm::vec3(0.0f, 0.0f, 0.0f);
 
-  glm::vec3 voxel_size = glm::vec3(2.f / 128.f, 1.0f / 256.f, 1.0f / 256.f);
-  glm::vec3 volume_voxels = { volume.info.layers[0].width, volume.info.layers[0].height, volume.info.layers[0].depth };
-  glm::vec3 volume_size = voxel_size * volume_voxels;
+  glm::vec3 volume_size(1.f / volume.info.width_frac, 1.f / volume.info.height_frac, 1.f / volume.info.depth_frac);
 
   float t = 0.f;
   while (!window.shouldClose()) {
@@ -157,10 +155,11 @@ int main(int argc, char *argv[]) {
     }
 
     // TODO hide transforms into object and camera class
-    // by default, the volume is rendered in the interval [0, 1] // TODO is this right? account for the logarithmic traversal, test with irregular data
+    // by default, the volume is rendered in the interval [0, volume.info.frac]
     glm::mat4 model = glm::translate(glm::mat4(1.f), volume_pos)
                     * glm::rotate(glm::mat4(1.f), t, glm::vec3(0.f, 1.f, 0.f))
                     * glm::rotate(glm::mat4(1.f), glm::radians(90.f), glm::vec3(1.f, 0.f, 0.f))
+                    * glm::translate(glm::mat4(1.f), glm::vec3(-0.5f))
                     * glm::scale(glm::mat4(1.f), volume_size);
 
     glm::mat4 view = glm::lookAt(camera_pos, camera_pos + camera_front, camera_up);
