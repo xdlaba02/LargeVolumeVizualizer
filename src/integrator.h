@@ -1,16 +1,12 @@
 #pragma once
 
-#include "blocked_volume.h"
+#include "tree_volume/tree_volume.h"
 #include "preintegrated_transfer_function.h"
 #include "intersection.h"
 
 #include <glm/glm.hpp>
 
 #include <cstdint>
-
-
-// rekurzivni integrator, spusti se nad hornim uzlem, udela min max nad transfer function a zanoruje se podle toho ktere potomky protina a zastavi se v hloubce podle potreby pameti a kvality.
-// v kazde urovni traverse grid?
 
 template <typename T>
 class Integrator {
@@ -23,7 +19,7 @@ public:
       m_transfer_a([&](float v){ return transfer(v).a; }),
       m_stepsize(stepsize) {}
 
-  glm::vec4 integrate(const BlockedVolume<T> &volume, const glm::vec3 &origin, const glm::vec3 &direction, uint8_t layer) const {
+  glm::vec4 integrate(const TreeVolume<T> &volume, const glm::vec3 &origin, const glm::vec3 &direction, uint8_t layer) const {
     float tmin, tmax;
     intersect_aabb_ray(origin, 1.f / direction, {0, 0, 0}, {1, 1, 1}, tmin, tmax);
 
@@ -73,7 +69,7 @@ public:
     return dst;
   }
 
-  glm::vec<4, simd::float_v> integrate(const BlockedVolume<T> &volume, const glm::vec3 &origin, const glm::vec<3, simd::float_v> &directions, const simd::uint32_v &layer) const {
+  glm::vec<4, simd::float_v> integrate(const TreeVolume<T> &volume, const glm::vec3 &origin, const glm::vec<3, simd::float_v> &directions, const simd::uint32_v &layer) const {
     simd::float_v tmins, tmaxs;
     intersect_aabb_rays_single_origin(origin, simd::float_v(1.f) / directions, {0, 0, 0}, {1, 1, 1}, tmins, tmaxs);
 
@@ -128,16 +124,16 @@ public:
   }
 
   /*
-  glm::vec4 integrate2(const BlockedVolume<T> &volume, const glm::vec3 &origin, const glm::vec3 &direction) const {
+  glm::vec4 integrate2(const TreeVolume<T> &volume, const glm::vec3 &origin, const glm::vec3 &direction) const {
 
     glm::vec4 dst(0.f, 0.f, 0.f, 1.f);
 
     const glm::vec3 size = {volume.info.layers[0].width, volume.info.layers[0].height, volume.info.layers[0].depth};
     const glm::vec3 size_in_blocks = {volume.info.layers[0].width_in_blocks, volume.info.layers[0].height_in_blocks, volume.info.layers[0].depth_in_blocks};
 
-    raster_traversal<BlockedVolume<T>::SUBVOLUME_SIDE>(origin, direction, size, size_in_blocks, [&](const glm::vec<3, uint32_t> &block_pos, const glm::vec3 &in_block_pos, float tmax) {
+    raster_traversal<TreeVolume<T>::SUBVOLUME_SIDE>(origin, direction, size, size_in_blocks, [&](const glm::vec<3, uint32_t> &block_pos, const glm::vec3 &in_block_pos, float tmax) {
 
-      typename BlockedVolume<T>::Node node = volume.nodes[volume.info.node_handle(block_pos.x, block_pos.y, block_pos.z, 0)];
+      typename TreeVolume<T>::Node node = volume.nodes[volume.info.node_handle(block_pos.x, block_pos.y, block_pos.z, 0)];
 
       if (node.min == node.max) { // fast integration
         float a = m_transfer_a(node.min, node.max);

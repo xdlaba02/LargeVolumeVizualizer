@@ -26,14 +26,13 @@ constexpr float approx_exp2(int32_t i) {
   return val.f;
 }
 
-
-
-// TODO intersection with filled part only
 // TODO Phong shading
 // TODO Determinace uzlu
 // TODO Ray packlet + simd
 // TODO Rozhrani
 // TODO Precomputes?
+// TODO Camera class
+// TODO Nicer Sampler1D and Sampler2D
 
 // Interactive isosurface ray tracing of large octree volumes
 // https://www.researchgate.net/publication/310054812_Interactive_isosurface_ray_tracing_of_large_octree_volumes
@@ -48,11 +47,12 @@ void ray_octree_traversal(const Ray &ray, const RayRange &range, const glm::vec3
     glm::vec3 tcenter = (center - ray.origin) * ray.direction_inverse;
 
     // fast sort axis by tcenter
-    std::array<uint8_t, 3> axis;
 
     bool gt01 = tcenter[0] > tcenter[1];
     bool gt02 = tcenter[0] > tcenter[2];
     bool gt12 = tcenter[1] > tcenter[2];
+
+    std::array<uint8_t, 3> axis;
 
     axis[ gt01 +  gt02] = 0;
     axis[!gt01 +  gt12] = 1;
@@ -177,9 +177,38 @@ glm::vec4 render(const TreeVolume<T> &volume, const Ray &ray, float step, const 
 
         glm::vec3 in_block = (pos - cell) * approx_exp2(layer) * float(TreeVolume<T>::SUBVOLUME_SIDE);
 
-        float slab_end_value = sample_block(volume, node.block_handle, in_block.x, in_block.y, in_block.z);
+        Samplet sampl = samplet(volume, node.block_handle, in_block.x, in_block.y, in_block.z);
 
-        integrate(transfer_function(slab_start_value, slab_end_value), dst, slab_end_t - slab_start_t);
+        float slab_end_value = linterp(sampl);
+
+        glm::vec4 src = transfer_function(slab_start_value, slab_end_value);
+
+#if 0
+        std::array<float, 3> grad = gradient(sampl);
+        if (grad[0] || grad[1] || grad[2]) {
+          glm::vec3 gradient_normal = glm::normalize(glm::vec3{grad[0], grad[1], grad[2]});
+
+          glm::vec3 light_direction = glm::normalize(glm::vec3{5, 5, 5} - pos);
+          glm::vec3 halfway_vector  = glm::normalize(ray.direction + light_direction);
+
+          float dot_diff = glm::max(0.f, glm::dot(gradient_normal, light_direction));
+
+          float dot_spec = glm::max(0.f, glm::dot(halfway_vector, gradient_normal));
+
+          static constinit float ka = 0.8f;
+          static constinit float kd = 1.0f;
+          static constinit float ks = 0.0f;
+          static constinit float shininess = 1000.0f;
+
+          float diffuse = kd * dot_diff;
+          float specular = ks * std::pow(dot_spec, shininess);
+
+          src = glm::vec4(glm::clamp(glm::vec3(src) * (ka + diffuse) + specular, 0.f, 1.f), src.a);
+        }
+
+#endif
+
+        integrate(src, dst, slab_end_t - slab_start_t);
 
         slab_start_value = slab_end_value;
         slab_start_t = slab_end_t;

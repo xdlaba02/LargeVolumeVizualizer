@@ -1,66 +1,90 @@
 #pragma once
 
 #include "tree_volume.h"
+#include "../morton.h"
+#include "../simd.h"
+
+struct Samplet {
+  int32_t data[2][2][2];
+  float frac[3];
+};
+
+// expects coordinates from interval <-.5f, TreeVolume<T>::SUBVOLUME_SIDE - .5f>
+// can safely handle values from interval (-1.f, TreeVolume<T>::SUBVOLUME_SIDE) due to truncation used
+template <typename T>
+inline Samplet samplet(const TreeVolume<T> &volume, uint64_t block_handle, float denorm_x, float denorm_y, float denorm_z) {
+  uint32_t voxs_x[2] { denorm_x, denorm_x + 1.f };
+  uint32_t voxs_y[2] { denorm_y, denorm_y + 1.f };
+  uint32_t voxs_z[2] { denorm_z, denorm_z + 1.f };
+
+  uint32_t voxs_x_interleaved[2] { Morton<TreeVolume<T>::BLOCK_BITS>::interleave(voxs_x[0]), Morton<TreeVolume<T>::BLOCK_BITS>::interleave(voxs_x[1]) };
+  uint32_t voxs_y_interleaved[2] { Morton<TreeVolume<T>::BLOCK_BITS>::interleave(voxs_y[0]), Morton<TreeVolume<T>::BLOCK_BITS>::interleave(voxs_y[1]) };
+  uint32_t voxs_z_interleaved[2] { Morton<TreeVolume<T>::BLOCK_BITS>::interleave(voxs_z[0]), Morton<TreeVolume<T>::BLOCK_BITS>::interleave(voxs_z[1]) };
+
+  Samplet output;
+
+  for (uint8_t z = 0; z < 2; z++) {
+    for (uint8_t y = 0; y < 2; y++) {
+      for (uint8_t x = 0; x < 2; x++) {
+        output.data[z][y][x] = volume.blocks[block_handle][Morton<TreeVolume<T>::BLOCK_BITS>::combine_interleaved(voxs_x_interleaved[x], voxs_y_interleaved[y], voxs_z_interleaved[z])];
+      }
+    }
+  }
+
+  output.frac[0] = denorm_x - voxs_x[0];
+  output.frac[1] = denorm_y - voxs_y[0];
+  output.frac[2] = denorm_z - voxs_z[0];
+
+  return output;
+}
+
+inline float linterp(const Samplet &samplet) {
+  float accs[2][2];
+
+  accs[0][0] = samplet.data[0][0][0] + (samplet.data[0][0][1] - samplet.data[0][0][0]) * samplet.frac[0];
+  accs[0][1] = samplet.data[0][1][0] + (samplet.data[0][1][1] - samplet.data[0][1][0]) * samplet.frac[0];
+  accs[1][0] = samplet.data[1][0][0] + (samplet.data[1][0][1] - samplet.data[1][0][0]) * samplet.frac[0];
+  accs[1][1] = samplet.data[1][1][0] + (samplet.data[1][1][1] - samplet.data[1][1][0]) * samplet.frac[0];
+
+  accs[0][0] += (accs[0][1] - accs[0][0]) * samplet.frac[1];
+  accs[1][0] += (accs[1][1] - accs[1][0]) * samplet.frac[1];
+
+  accs[0][0] += (accs[1][0] - accs[0][0]) * samplet.frac[2];
+
+  return accs[0][0];
+}
+
+inline std::array<float, 3> gradient(const Samplet &samplet) {
+  std::array<float, 3> grad {};
+
+  int32_t diff[2][2][3];
+
+  for (uint8_t y = 0; y < 2; y++) {
+    for (uint8_t x = 0; x < 2; x++) {
+      diff[y][x][0] = samplet.data[y][x][0] - samplet.data[y][x][1];
+      diff[y][x][1] = samplet.data[y][0][x] - samplet.data[y][1][x];
+      diff[y][x][2] = samplet.data[0][y][x] - samplet.data[1][y][x];
+    }
+  }
+
+  static constinit uint8_t low_frac_idx[3] { 1, 0, 0 };
+  static constinit uint8_t high_frac_idx[3] { 2, 2, 1 };
+
+  for (uint8_t i = 0; i < 3; i++) {
+    float acc0 = diff[0][1][i] + (diff[0][0][i] - diff[0][1][i]) * 0.5f;
+    float acc1 = diff[1][1][i] + (diff[1][0][i] - diff[1][1][i]) * 0.5f;
+
+    grad[i] = acc1 + (acc0 - acc1) * 0.5f;
+  }
+
+  return grad;
+}
 
 // expects coordinates from interval <-.5f, TreeVolume<T>::SUBVOLUME_SIDE - .5f>
 // can safely handle values from interval (-1.f, TreeVolume<T>::SUBVOLUME_SIDE) due to truncation used
 template <typename T>
 inline float sample_block(const TreeVolume<T> &volume, uint64_t block_handle, float denorm_x, float denorm_y, float denorm_z) {
-  uint32_t denorm_x_low = denorm_x;
-  uint32_t denorm_y_low = denorm_y;
-  uint32_t denorm_z_low = denorm_z;
-
-  uint32_t denorm_x_high = denorm_x + 1.f;
-  uint32_t denorm_y_high = denorm_y + 1.f;
-  uint32_t denorm_z_high = denorm_z + 1.f;
-
-  float frac_x = denorm_x - denorm_x_low;
-  float frac_y = denorm_y - denorm_y_low;
-  float frac_z = denorm_z - denorm_z_low;
-
-  uint32_t denorm_x_low_interleaved = Morton<TreeVolume<T>::BLOCK_BITS>::interleave(denorm_x_low);
-  uint32_t denorm_y_low_interleaved = Morton<TreeVolume<T>::BLOCK_BITS>::interleave(denorm_y_low);
-  uint32_t denorm_z_low_interleaved = Morton<TreeVolume<T>::BLOCK_BITS>::interleave(denorm_z_low);
-
-  uint32_t denorm_x_high_interleaved = Morton<TreeVolume<T>::BLOCK_BITS>::interleave(denorm_x_high);
-  uint32_t denorm_y_high_interleaved = Morton<TreeVolume<T>::BLOCK_BITS>::interleave(denorm_y_high);
-  uint32_t denorm_z_high_interleaved = Morton<TreeVolume<T>::BLOCK_BITS>::interleave(denorm_z_high);
-
-  uint32_t morton_indices[2][2][2];
-
-  morton_indices[0][0][0] = Morton<TreeVolume<T>::BLOCK_BITS>::combine_interleaved(denorm_x_low_interleaved,  denorm_y_low_interleaved,  denorm_z_low_interleaved);
-  morton_indices[0][0][1] = Morton<TreeVolume<T>::BLOCK_BITS>::combine_interleaved(denorm_x_high_interleaved, denorm_y_low_interleaved,  denorm_z_low_interleaved);
-  morton_indices[0][1][0] = Morton<TreeVolume<T>::BLOCK_BITS>::combine_interleaved(denorm_x_low_interleaved,  denorm_y_high_interleaved, denorm_z_low_interleaved);
-  morton_indices[0][1][1] = Morton<TreeVolume<T>::BLOCK_BITS>::combine_interleaved(denorm_x_high_interleaved, denorm_y_high_interleaved, denorm_z_low_interleaved);
-  morton_indices[1][0][0] = Morton<TreeVolume<T>::BLOCK_BITS>::combine_interleaved(denorm_x_low_interleaved,  denorm_y_low_interleaved,  denorm_z_high_interleaved);
-  morton_indices[1][0][1] = Morton<TreeVolume<T>::BLOCK_BITS>::combine_interleaved(denorm_x_high_interleaved, denorm_y_low_interleaved,  denorm_z_high_interleaved);
-  morton_indices[1][1][0] = Morton<TreeVolume<T>::BLOCK_BITS>::combine_interleaved(denorm_x_low_interleaved,  denorm_y_high_interleaved, denorm_z_high_interleaved);
-  morton_indices[1][1][1] = Morton<TreeVolume<T>::BLOCK_BITS>::combine_interleaved(denorm_x_high_interleaved, denorm_y_high_interleaved, denorm_z_high_interleaved);
-
-  int32_t buffers[2][2][2];
-
-  buffers[0][0][0] = volume.blocks[block_handle][morton_indices[0][0][0]];
-  buffers[0][0][1] = volume.blocks[block_handle][morton_indices[0][0][1]];
-  buffers[0][1][0] = volume.blocks[block_handle][morton_indices[0][1][0]];
-  buffers[0][1][1] = volume.blocks[block_handle][morton_indices[0][1][1]];
-  buffers[1][0][0] = volume.blocks[block_handle][morton_indices[1][0][0]];
-  buffers[1][0][1] = volume.blocks[block_handle][morton_indices[1][0][1]];
-  buffers[1][1][0] = volume.blocks[block_handle][morton_indices[1][1][0]];
-  buffers[1][1][1] = volume.blocks[block_handle][morton_indices[1][1][1]];
-
-  float accs[2][2];
-
-  accs[0][0] = buffers[0][0][0] + (buffers[0][0][1] - buffers[0][0][0]) * frac_x;
-  accs[0][1] = buffers[0][1][0] + (buffers[0][1][1] - buffers[0][1][0]) * frac_x;
-  accs[1][0] = buffers[1][0][0] + (buffers[1][0][1] - buffers[1][0][0]) * frac_x;
-  accs[1][1] = buffers[1][1][0] + (buffers[1][1][1] - buffers[1][1][0]) * frac_x;
-
-  accs[0][0] += (accs[0][1] - accs[0][0]) * frac_y;
-  accs[1][0] += (accs[1][1] - accs[1][0]) * frac_y;
-
-  accs[0][0] += (accs[1][0] - accs[0][0]) * frac_z;
-
-  return accs[0][0];
+  return linterp(samplet(volume, block_handle, denorm_x, denorm_y, denorm_z));
 }
 
 // expects coordinates from interval <-.5f, TreeVolume<T>::SUBVOLUME_SIDE - .5f>

@@ -170,7 +170,7 @@ int main(int argc, char *argv[]) {
       for (uint32_t x = 0; x < window.width(); x++) {
         glm::vec3 ray_direction = ray_transform * ray_generator(x, y);
 
-        glm::vec4 output = render(volume, { ray_origin, ray_direction }, 0.002f, transfer_function);
+        glm::vec4 output = render(volume, { ray_origin, ray_direction }, 0.01f, transfer_function);
 
         window.raster(x, y, 0) = output.r * 255.f;
         window.raster(x, y, 1) = output.g * 255.f;

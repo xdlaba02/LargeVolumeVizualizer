@@ -1,13 +1,7 @@
 #pragma once
 
-#include "../mapped_file.h"
+#include "../mapped_file.h" // TODO move maping outside.
 #include "../endian.h"
-#include "../simd.h"
-#include "../morton.h"
-#include "../preintegrated_transfer_function.h"
-#include "../raster_traversal.h"
-
-#include <glm/glm.hpp>
 
 #include <cstdint>
 #include <cstddef>
@@ -27,6 +21,7 @@ public:
 
   struct Info {
     struct Layer {
+      
       Layer(uint32_t width_in_blocks, uint32_t height_in_blocks, uint32_t depth_in_blocks):
         width_in_blocks(width_in_blocks),
         height_in_blocks(height_in_blocks),

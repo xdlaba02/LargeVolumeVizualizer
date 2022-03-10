@@ -42,6 +42,27 @@ std::array<uint8_t, 3> sort_gt(const std::array<float, 3> &in) {
   return out;
 }
 
+std::array<uint8_t, 3> sort_swap(std::array<float, 3> &in) {
+  std::array<uint8_t, 3> out {0, 1, 2};
+
+  if (in[0] > in[1]) {
+    std::swap(in[0], in[1]);
+    std::swap(out[0], out[1]);
+  }
+
+  if (in[0] > in[2]) {
+    std::swap(in[0], in[2]);
+    std::swap(out[0], out[2]);
+  }
+
+  if (in[1] > in[2]) {
+    std::swap(in[1], in[2]);
+    std::swap(out[1], out[2]);
+  }
+
+  return out;
+}
+
 template <typename F>
 float test(uint64_t n, const F &func) {
   std::default_random_engine re(0);
@@ -51,7 +72,8 @@ float test(uint64_t n, const F &func) {
 
   auto start = std::chrono::steady_clock::now();
   for (uint64_t i = 0; i < n; i++) {
-    order = func({ rd(re), rd(re), rd(re) });
+    std::array<float, 3> in{ rd(re), rd(re), rd(re) };
+    order = func(in);
   }
 
   return std::chrono::duration<float>(std::chrono::steady_clock::now() - start).count();
@@ -62,4 +84,6 @@ int main(void) {
   std::cout << "stl: " << test(n, sort_stl) << " s\n";
   std::cout << "order: " << test(n, sort_order) << " s\n";
   std::cout << "gt: " << test(n, sort_gt) << " s\n";
+
+  std::cout << "swap: " << test(n, sort_swap) << " s\n";
 }
