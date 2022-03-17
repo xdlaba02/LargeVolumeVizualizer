@@ -1,5 +1,5 @@
 
-#include "raw_volume.h"
+#include "raw_volume/raw_volume.h"
 #include "tree_volume/tree_volume.h"
 #include "mapped_file.h"
 #include "morton.h"
@@ -78,7 +78,7 @@ int main(int argc, char *argv[]) {
           uint32_t original_y = std::min(block_y * TreeVolume<uint8_t>::SUBVOLUME_SIDE + y, height - 1);
           uint32_t original_z = std::min(block_z * TreeVolume<uint8_t>::SUBVOLUME_SIDE + z, depth - 1);
 
-          block[i] = volume(original_x, original_y, original_z);
+          block[i] = volume.data[volume.voxel_handle(original_x, original_y, original_z)];
 
           node.min = std::min<uint8_t>(node.min, block[i]);
           node.max = std::max<uint8_t>(node.max, block[i]);

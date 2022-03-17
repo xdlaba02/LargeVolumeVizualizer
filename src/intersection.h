@@ -1,43 +1,17 @@
 #pragma once
 
-#include "simd.h"
-
 #include <glm/glm.hpp>
 
-inline void intersect_aabb_rays_single_origin(const glm::vec3& origin, glm::vec<3, simd::float_v> ray_direction_inverses, const glm::vec3 &min, const glm::vec3 &max, simd::float_v& tmins, simd::float_v& tmaxs) {
-  tmins = -std::numeric_limits<float>::infinity();
-  tmaxs = std::numeric_limits<float>::infinity();
-
-  for (uint32_t i = 0; i < 3; ++i) {
-    simd::float_v t0 = (min[i] - origin[i]) * ray_direction_inverses[i];
-    simd::float_v t1 = (max[i] - origin[i]) * ray_direction_inverses[i];
-
-    simd::swap(t0, t1, ray_direction_inverses[i] < 0.f);
-
-    tmins(t0 > tmins) = t0;
-    tmaxs(t1 < tmaxs) = t1;
-  }
-
-  tmins(tmins < 0.f) = 0.f; // solves when ray hits box from behind
-}
+#include <array>
 
 inline void intersect_aabb_ray(const glm::vec3& origin, glm::vec3 ray_direction_inverse, const glm::vec3 &min, const glm::vec3 &max, float& tmin, float& tmax) {
-  tmin = -std::numeric_limits<float>::infinity();
-  tmax = std::numeric_limits<float>::infinity();
+  std::array<glm::vec3, 2> ts { (min - origin) * ray_direction_inverse,
+                                (max - origin) * ray_direction_inverse };
 
-  for (uint32_t i = 0; i < 3; ++i) {
-    float t0 = (min[i] - origin[i]) * ray_direction_inverse[i];
-    float t1 = (max[i] - origin[i]) * ray_direction_inverse[i];
+  auto direction_negative = glm::lessThan(ray_direction_inverse, glm::vec3(0.f));
 
-    if (ray_direction_inverse[i] < 0.f) {
-      tmin = std::max(tmin, t1);
-      tmax = std::min(tmax, t0);
-    }
-    else {
-      tmin = std::max(tmin, t0);
-      tmax = std::min(tmax, t1);
-    }
-  }
+  tmin = std::max(std::max(ts[direction_negative.x].x,  ts[direction_negative.y].y),  ts[direction_negative.z].z);
+  tmax = std::min(std::min(ts[!direction_negative.x].x, ts[!direction_negative.y].y), ts[!direction_negative.z].z);
 
   tmin = std::max(tmin, 0.f); // solves when ray hits box from behind
 }

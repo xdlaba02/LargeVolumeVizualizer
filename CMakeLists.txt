@@ -8,7 +8,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(CMAKE_CXX_FLAGS "-Wall -Wextra -pedantic -Wfatal-errors -fopenmp -g")
-set(CMAKE_CXX_FLAGS_DEBUG "-Og -g")
+set(CMAKE_CXX_FLAGS_DEBUG "-O0")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -DNDEBUG")
 
 add_subdirectory(external)
@@ -33,6 +33,5 @@ add_executable(vizualize src/vizualize.cc)
 add_executable(process src/process.cc)
 
 target_link_libraries_system(vizualize glm glfw OpenGL::GL Vc)
-target_link_libraries_system(process Vc glm)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)

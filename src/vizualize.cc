@@ -1,11 +1,13 @@
 
 #include "tree_volume/tree_volume.h"
-#include "renderer.h"
+#include "tree_volume/renderer.h"
+#include "tree_volume/renderer_simd.h"
+#include "tree_volume/renderer_packlet.h"
 #include "linear_gradient.h"
+#include "integrator.h"
 #include "preintegrated_transfer_function.h"
 #include "vizualize_args.h"
 #include "glfw.h"
-#include "simd.h"
 #include "intersection.h"
 #include "ray_generator.h"
 
@@ -18,8 +20,12 @@
 #include <vector>
 #include <chrono>
 
-// TODO pyramid
-// TODO min max tree
+// Phong shading
+// TODO Determinace uzlu
+// TODO Rozhrani
+// TODO Precomputes?
+// TODO Camera class
+// TODO Nicer Sampler1D and Sampler2D
 
 int main(int argc, char *argv[]) {
   const char *processed_volume;
@@ -64,7 +70,11 @@ int main(int argc, char *argv[]) {
   PreintegratedTransferFunction<uint8_t> preintegrated_b([&](float v){ return linear_gradient(color_map, v).b; });
   PreintegratedTransferFunction<uint8_t> preintegrated_a([&](float v){ return linear_gradient(alpha_map, v); });
 
-  auto transfer_function = [&](float v0, float v1) {
+  auto transfer_function = [&](const auto &v0, const auto &v1, const auto &mask) {
+    return Vec4Vec(preintegrated_r(v0, v1, mask), preintegrated_g(v0, v1, mask), preintegrated_b(v0, v1, mask), preintegrated_a(v0, v1, mask));
+  };
+
+  auto transfer_function_scalar = [&](const auto &v0, const auto &v1) {
     return glm::vec4(preintegrated_r(v0, v1), preintegrated_g(v0, v1), preintegrated_b(v0, v1), preintegrated_a(v0, v1));
   };
 
@@ -152,7 +162,7 @@ int main(int argc, char *argv[]) {
     // TODO hide transforms into object and camera class
     // by default, the volume is rendered in the interval [0, volume.info.frac]
     glm::mat4 model = glm::translate(glm::mat4(1.f), volume_pos)
-                    * glm::rotate(glm::mat4(1.f), t, glm::vec3(0.f, 1.f, 0.f))
+                    * glm::rotate(glm::mat4(1.f), 0.f, glm::vec3(0.f, 1.f, 0.f))
                     * glm::rotate(glm::mat4(1.f), glm::radians(90.f), glm::vec3(1.f, 0.f, 0.f))
                     * glm::translate(glm::mat4(1.f), glm::vec3(-0.5f))
                     * glm::scale(glm::mat4(1.f), volume_size);
@@ -166,15 +176,54 @@ int main(int argc, char *argv[]) {
     RayGenerator ray_generator(window.width(), window.height(), 45.f);
 
     #pragma omp parallel for schedule(dynamic)
-    for (uint32_t y = 0; y < window.height(); y++) {
-      for (uint32_t x = 0; x < window.width(); x++) {
-        glm::vec3 ray_direction = ray_transform * ray_generator(x, y);
+    for (uint32_t y = 0; y < window.height(); y += simd::len) {
+      for (uint32_t x = 0; x < window.width(); x += simd::len) {
 
-        glm::vec4 output = render(volume, { ray_origin, ray_direction }, 0.01f, transfer_function);
+        RayPacklet ray_packlet {};
+        MaskPacklet mask_packlet {};
+        Vec4Packlet output_packlet {};
 
-        window.raster(x, y, 0) = output.r * 255.f;
-        window.raster(x, y, 1) = output.g * 255.f;
-        window.raster(x, y, 2) = output.b * 255.f;
+        for (uint32_t yy = 0; yy < simd::len && y + yy < window.height(); yy++) {
+
+          Vec3Vec ray_direction;
+          for (uint32_t xx = 0; xx < simd::len && x + xx < window.width(); xx++) {
+            glm::vec3 dir = ray_transform * ray_generator(x + xx, y + yy);
+
+            /*
+            glm::vec4 output = integrate(volume, ray_origin, dir, 0, 0.001f, transfer_function_scalar);
+            glm::vec4 output = render(volume, { ray_origin, dir, 1.f / dir }, 0.001f, transfer_function_scalar);
+            output_packlet[yy].x[xx] = output.x;
+            output_packlet[yy].y[xx] = output.y;
+            output_packlet[yy].z[xx] = output.z;
+            */
+
+            ray_direction.x[xx] = dir.x;
+            ray_direction.y[xx] = dir.y;
+            ray_direction.z[xx] = dir.z;
+
+            mask_packlet[yy][xx] = true;
+          }
+
+          ray_packlet[yy] = { ray_origin, ray_direction, simd::float_v(1.f) / ray_direction };
+
+          output_packlet[yy] = render(volume, { ray_origin, ray_direction, simd::float_v(1.f) / ray_direction }, 0.001f, mask_packlet[yy], transfer_function);
+        }
+
+        //output_packlet = render(volume, ray_packlet, 0.001f, mask_packlet, transfer_function);
+
+        for (uint32_t yy = 0; yy < simd::len; yy++) {
+          output_packlet[yy].r *= 255.f;
+          output_packlet[yy].g *= 255.f;
+          output_packlet[yy].b *= 255.f;
+
+          for (uint32_t xx = 0; xx < simd::len; xx++) {
+            if (mask_packlet[yy][xx]) {
+              window.raster(x + xx, y + yy, 0) = output_packlet[yy].r[xx];
+              window.raster(x + xx, y + yy, 1) = output_packlet[yy].g[xx];
+              window.raster(x + xx, y + yy, 2) = output_packlet[yy].b[xx];
+            }
+          }
+        }
       }
     }
 
