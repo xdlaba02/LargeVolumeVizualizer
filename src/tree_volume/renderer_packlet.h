@@ -4,8 +4,8 @@
 #include "sampler.h"
 #include "renderer_simd.h"
 
-#include <ray_traversal/octree_traversal_packlet.h>
-#include <ray_traversal/intersection.h>
+#include <ray/traversal_octree_packlet.h>
+#include <ray/intersection.h>
 
 #include <utils/utils.h>
 #include <utils/simd.h>

@@ -1,10 +1,11 @@
 #pragma once
 
 #include "tree_volume.h"
-#include "sampler.h"
+#include "sampler_simd.h"
+#include "blend_simd.h"
 
-#include <ray_traversal/octree_traversal_simd.h>
-#include <ray_traversal/intersection_simd.h>
+#include <ray/traversal_octree_simd.h>
+#include <ray/intersection_simd.h>
 
 #include <utils/utils.h>
 #include <utils/simd.h>
@@ -14,17 +15,6 @@
 #include <cstdint>
 
 #include <array>
-
-void blend(const Vec4Vec &src_vec, Vec4Vec &dst_vec, simd::float_v stepsize, const simd::float_m &mask_vec) {
-  simd::float_v alpha = 1.f - simd::exp(-src_vec.a * stepsize);
-
-  simd::float_v coef = alpha * dst_vec.a;
-
-  dst_vec.r(mask_vec) += src_vec.r * coef;
-  dst_vec.g(mask_vec) += src_vec.g * coef;
-  dst_vec.b(mask_vec) += src_vec.b * coef;
-  dst_vec.a(mask_vec) *= 1.f - alpha;
-};
 
 template <typename T, typename TransferFunctionType>
 Vec4Vec render(const TreeVolume<T> &volume, const RayVec &ray_vec, float step, simd::float_m mask_vec, const TransferFunctionType &transfer_function) {

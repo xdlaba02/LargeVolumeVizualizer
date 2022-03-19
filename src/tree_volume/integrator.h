@@ -2,8 +2,9 @@
 
 #include "tree_volume.h"
 #include "sampler.h"
+#include "blend.h"
 
-#include <ray_traversal/intersection.h>
+#include <ray/intersection.h>
 
 #include <glm/glm.hpp>
 
@@ -14,7 +15,7 @@ glm::vec4 integrate(const TreeVolume<T> &volume, const glm::vec3 &origin, const 
   float tmin, tmax;
   intersect_aabb_ray(origin, 1.f / direction, {0, 0, 0}, { volume.info.width_frac, volume.info.height_frac, volume.info.depth_frac}, tmin, tmax);
 
-  float stepsize = step * (layer + 1);
+  float stepsize = step * approx_exp2(layer);
 
   glm::vec4 dst(0.f, 0.f, 0.f, 1.f);
 
@@ -27,27 +28,12 @@ glm::vec4 integrate(const TreeVolume<T> &volume, const glm::vec3 &origin, const 
 
   tmin += stepsize;
 
-  while (tmin < tmax) {
-    glm::vec3 sample = origin + direction * tmin;
+  while (tmin < tmax && dst.a > 1.f / 256.f) {
+    glm::vec3 sample_pos = origin + direction * tmin;
 
-    float value = ::sample(volume, sample.x, sample.y, sample.z, layer);
+    float value = sample(volume, sample_pos.x, sample_pos.y, sample_pos.z, layer);
 
-    auto src = transfer_function(value, prev_value);
-
-    if (src.a > 0.f) {
-      float alpha = 1.f - std::exp(-src.a * stepsize);
-
-      float coef = alpha * dst.a;
-
-      dst.r += src.r * coef;
-      dst.g += src.g * coef;
-      dst.b += src.b * coef;
-      dst.a *= 1 - alpha;
-
-      if (dst.a <= 1.f / 256.f) {
-        break;
-      }
-    }
+    blend(transfer_function(value, prev_value), dst, stepsize);
 
     prev_value = value;
     tmin += stepsize;

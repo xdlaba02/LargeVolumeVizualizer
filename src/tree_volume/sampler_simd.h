@@ -1,7 +1,9 @@
 #pragma once
 
 #include "tree_volume.h"
+
 #include <utils/morton.h>
+#include <utils/utils.h>
 #include <utils/simd.h>
 
 // expects coordinates from interval <-.5f, TreeVolume<T>::SUBVOLUME_SIDE - .5f>
@@ -71,16 +73,18 @@ inline simd::float_v sample(const TreeVolume<T> &volume, const std::array<uint64
 
 // expects coordinates from interval <0, 1>
 template <typename T>
-inline simd::float_v sample(const TreeVolume<T> &volume, const simd::float_v &x, const simd::float_v &y, const simd::float_v &z, const simd::uint32_v &layer, const simd::float_m &mask) {
+inline simd::float_v sample(const TreeVolume<T> &volume, const simd::float_v &x, const simd::float_v &y, const simd::float_v &z, uint8_t layer, const simd::float_m &mask) {
   simd::uint32_v width;
   simd::uint32_v height;
   simd::uint32_v depth;
 
+  uint8_t layer_index = std::size(volume.info.layers) - 1 - layer;
+
   for (uint32_t k = 0; k < simd::len; k++) {
     if (mask[k]) {
-      width[k]  = volume.info.layers[layer[k]].width;
-      height[k] = volume.info.layers[layer[k]].height;
-      depth[k]  = volume.info.layers[layer[k]].depth;
+      width[k]  = approx_exp2(layer_index) * TreeVolume<T>::SUBVOLUME_SIDE;
+      height[k] = approx_exp2(layer_index) * TreeVolume<T>::SUBVOLUME_SIDE;
+      depth[k]  = approx_exp2(layer_index) * TreeVolume<T>::SUBVOLUME_SIDE;
     }
   }
 
@@ -101,7 +105,7 @@ inline simd::float_v sample(const TreeVolume<T> &volume, const simd::float_v &x,
 
   for (uint32_t k = 0; k < simd::len; k++) {
     if (mask[k]) {
-      const typename TreeVolume<T>::Node &node = volume.nodes[volume.info.node_handle(block_x[k], block_y[k], block_z[k], layer[k])];
+      const typename TreeVolume<T>::Node &node = volume.nodes[volume.info.node_handle(block_x[k], block_y[k], block_z[k], layer)];
       min[k] = node.min;
       max[k] = node.max;
       block_handles[k] = node.block_handle;
@@ -110,14 +114,14 @@ inline simd::float_v sample(const TreeVolume<T> &volume, const simd::float_v &x,
 
   simd::float_v samples = min;
 
-  simd::float_m integrate = (min != max) & mask;
+  simd::float_m block_exists = (min != max) && mask;
 
-  if (!integrate.isEmpty()) {
+  if (!block_exists.isEmpty()) {
     simd::float_v in_block_x = denorm_x - block_x * TreeVolume<T>::SUBVOLUME_SIDE;
     simd::float_v in_block_y = denorm_y - block_y * TreeVolume<T>::SUBVOLUME_SIDE;
     simd::float_v in_block_z = denorm_z - block_z * TreeVolume<T>::SUBVOLUME_SIDE;
 
-    samples(integrate) = sample_block(volume, block_handles, in_block_x, in_block_y, in_block_z, integrate);
+    samples(block_exists) = sample(volume, block_handles, in_block_x, in_block_y, in_block_z, block_exists);
   }
 
   return samples;

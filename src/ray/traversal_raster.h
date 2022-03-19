@@ -1,29 +1,20 @@
 #pragma once
 
+#include "ray.h"
+
 #include <glm/glm.hpp>
 
 #include <cstdint>
 
 #include <array>
 
-struct Ray {
-  glm::vec3 origin;
-  glm::vec3 direction;
-  glm::vec3 direction_inverse;
-};
-
-struct RayRange {
-  float min;
-  float max;
-};
-
 template <typename F>
-inline void ray_raster_traversal(const Ray &ray, const RayRange &range, const glm::vec<3, uint32_t> &size, const F& callback) {
+inline void ray_raster_traversal(const Ray &ray, const RayRange &range, const F& callback) {
   glm::vec3 pos = ray.origin + ray.direction * range.min;
 
-  glm::vec<3, uint32_t> cell = glm::vec<3, uint32_t>(pos); // this is wrong for negative directions because cell[i] might be == to size[i], otherwise it should work
+  glm::vec<3, uint32_t> block = glm::vec<3, uint32_t>(pos); // this is wrong for negative directions because block[i] might be == to size[i], otherwise it should work
 
-  glm::vec3 next_max = (glm::vec3(cell) - ray.origin) * ray.direction_inverse;
+  glm::vec3 next_max = (glm::vec3(block) - ray.origin) * ray.direction_inverse;
 
   glm::vec3 delta = glm::abs(ray.direction_inverse);
 
@@ -47,11 +38,11 @@ inline void ray_raster_traversal(const Ray &ray, const RayRange &range, const gl
 
   RayRange child_range { range.min, next_max[axis] };
 
-  while (child_range.max < range.max && callback(cell, child_range)) {
+  while (child_range.max < range.max && callback(child_range, block)) {
     child_range.min = child_range.max;
 
     next_max[axis] += delta[axis];
-    cell[axis] += step[axis];
+    block[axis] += step[axis];
 
     axis = idx_of_min(next_max);
     child_range.max = next_max[axis];

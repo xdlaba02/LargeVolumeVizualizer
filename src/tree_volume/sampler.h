@@ -62,9 +62,9 @@ inline std::array<float, 3> gradient(const Samplet &samplet) {
 
   for (uint8_t y = 0; y < 2; y++) {
     for (uint8_t x = 0; x < 2; x++) {
-      diff[y][x][0] = samplet.data[y][x][0] - samplet.data[y][x][1];
-      diff[y][x][1] = samplet.data[y][0][x] - samplet.data[y][1][x];
-      diff[y][x][2] = samplet.data[0][y][x] - samplet.data[1][y][x];
+      diff[y][x][0] = samplet.data[y][x][1] - samplet.data[y][x][0];
+      diff[y][x][1] = samplet.data[y][1][x] - samplet.data[y][0][x];
+      diff[y][x][2] = samplet.data[1][y][x] - samplet.data[0][y][x];
     }
   }
 
@@ -72,10 +72,10 @@ inline std::array<float, 3> gradient(const Samplet &samplet) {
   static constinit uint8_t high_frac_idx[3] { 2, 2, 1 };
 
   for (uint8_t i = 0; i < 3; i++) {
-    float acc0 = diff[0][1][i] + (diff[0][0][i] - diff[0][1][i]) * 0.5f;
-    float acc1 = diff[1][1][i] + (diff[1][0][i] - diff[1][1][i]) * 0.5f;
+    float acc0 = diff[0][1][i] + (diff[0][0][i] - diff[0][1][i]) * samplet.frac[low_frac_idx[i]];
+    float acc1 = diff[1][1][i] + (diff[1][0][i] - diff[1][1][i]) * samplet.frac[low_frac_idx[i]];
 
-    grad[i] = acc1 + (acc0 - acc1) * 0.5f;
+    grad[i] = acc1 + (acc0 - acc1) * samplet.frac[high_frac_idx[i]];
   }
 
   return grad;

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "ray_simd.h"
+
 #include <utils/utils.h>
 #include <utils/simd.h>
 
@@ -8,20 +10,6 @@
 #include <cstdint>
 
 #include <array>
-
-using Vec3Vec = glm::vec<3, simd::float_v>;
-using Vec4Vec = glm::vec<4, simd::float_v>;
-
-struct RayVec {
-  Vec3Vec origin;
-  Vec3Vec direction;
-  Vec3Vec direction_inverse;
-};
-
-struct RayRangeVec {
-  simd::float_v min;
-  simd::float_v max;
-};
 
 template <typename F>
 void ray_octree_traversal(const RayVec &ray_vec, const RayRangeVec &range_vec, Vec3Vec cell_vec, uint32_t layer, simd::float_m mask_vec, const F &callback) {

@@ -1,3 +1,6 @@
+#pragma once
+
+#include "ray.h"
 
 #include <utils/utils.h>
 
@@ -6,17 +9,6 @@
 #include <cstdint>
 
 #include <array>
-
-struct Ray {
-  glm::vec3 origin;
-  glm::vec3 direction;
-  glm::vec3 direction_inverse;
-};
-
-struct RayRange {
-  float min;
-  float max;
-};
 
 // Interactive isosurface ray tracing of large octree volumes
 // https://www.researchgate.net/publication/310054812_Interactive_isosurface_ray_tracing_of_large_octree_volumes

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "octree_traversal_simd.h"
+#include "traversal_octree_simd.h"
 
 #include <utils/utils.h>
 #include <utils/simd.h>

@@ -1,3 +1,5 @@
+#pragma once
+
 #include "raw_volume.h"
 
 #include <utils/simd.h>

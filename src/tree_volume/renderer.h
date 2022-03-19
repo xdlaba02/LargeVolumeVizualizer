@@ -1,9 +1,11 @@
+#pragma once
 
 #include "tree_volume.h"
 #include "sampler.h"
+#include "blend.h"
 
-#include <ray_traversal/octree_traversal.h>
-#include <ray_traversal/intersection.h>
+#include <ray/traversal_octree.h>
+#include <ray/intersection.h>
 
 #include <utils/utils.h>
 
@@ -12,17 +14,6 @@
 #include <cstdint>
 
 #include <array>
-
-void blend(const glm::vec4 &src, glm::vec4 &dst, float stepsize) {
-  float alpha = std::exp(-src.a * stepsize);
-
-  float coef = (1.f - alpha) * dst.a;
-
-  dst.r += src.r * coef;
-  dst.g += src.g * coef;
-  dst.b += src.b * coef;
-  dst.a *= alpha;
-};
 
 template <typename T, typename TransferFunctionType>
 glm::vec4 render(const TreeVolume<T> &volume, const Ray &ray, float step, const TransferFunctionType &transfer_function) {

@@ -7,6 +7,8 @@
 #include <tree_volume/renderer_simd.h>
 #include <tree_volume/renderer_packlet.h>
 #include <tree_volume/integrator.h>
+#include <tree_volume/integrator_simd.h>
+#include <tree_volume/integrator_raster.h>
 
 #include <utils/linear_gradient.h>
 #include <utils/preintegrated_transfer_function.h>
@@ -191,12 +193,12 @@ int main(int argc, char *argv[]) {
             glm::vec3 dir = ray_transform * ray_generator(x + xx, y + yy);
 
             /*
-            glm::vec4 output = integrate(volume, ray_origin, dir, 0, 0.001f, transfer_function_scalar);
+            glm::vec4 output = integrate_raster(volume, ray_origin, dir, 0, 0.001f, transfer_function_scalar);
+            */
             glm::vec4 output = render(volume, { ray_origin, dir, 1.f / dir }, 0.001f, transfer_function_scalar);
             output_packlet[yy].x[xx] = output.x;
             output_packlet[yy].y[xx] = output.y;
             output_packlet[yy].z[xx] = output.z;
-            */
 
             ray_direction.x[xx] = dir.x;
             ray_direction.y[xx] = dir.y;
@@ -207,7 +209,8 @@ int main(int argc, char *argv[]) {
 
           ray_packlet[yy] = { ray_origin, ray_direction, simd::float_v(1.f) / ray_direction };
 
-          output_packlet[yy] = render(volume, { ray_origin, ray_direction, simd::float_v(1.f) / ray_direction }, 0.001f, mask_packlet[yy], transfer_function);
+          //output_packlet[yy] = render(volume, { ray_origin, ray_direction, simd::float_v(1.f) / ray_direction }, 0.001f, mask_packlet[yy], transfer_function);
+          //output_packlet[yy] = integrate(volume, ray_origin, ray_direction, mask_packlet[yy], 0, 0.001f, transfer_function);
         }
 
         //output_packlet = render(volume, ray_packlet, 0.001f, mask_packlet, transfer_function);

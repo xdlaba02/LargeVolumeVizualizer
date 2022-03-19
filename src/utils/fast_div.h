@@ -43,6 +43,6 @@ class FastDiv {
   }
 
 public:
-  static constinit T SHIFT = bestShiftSearch();
-  static constinit T MULT = computeMult(SHIFT);
+  static const constinit T SHIFT = bestShiftSearch();
+  static const constinit T MULT = computeMult(SHIFT);
 };
