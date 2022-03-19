@@ -1,7 +1,9 @@
 #pragma once
 
-#include "tree_volume/tree_volume.h"
-#include "intersection_simd.h"
+#include "tree_volume.h"
+#include "sampler_simd.h"
+
+#include <ray_traversal/intersection_simd.h>
 
 #include <glm/glm.hpp>
 

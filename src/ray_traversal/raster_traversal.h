@@ -47,7 +47,7 @@ inline void ray_raster_traversal(const Ray &ray, const RayRange &range, const gl
 
   RayRange child_range { range.min, next_max[axis] };
 
-  while (callback(cell, child_range)) {
+  while (child_range.max < range.max && callback(cell, child_range)) {
     child_range.min = child_range.max;
 
     next_max[axis] += delta[axis];

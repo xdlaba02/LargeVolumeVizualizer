@@ -1,8 +1,9 @@
 #pragma once
 
 #include "tree_volume.h"
-#include "../morton.h"
-#include "../utils.h"
+
+#include <utils/morton.h>
+#include <utils/utils.h>
 
 struct Samplet {
   int32_t data[2][2][2];

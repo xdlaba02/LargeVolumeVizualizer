@@ -1,9 +1,9 @@
 #pragma once
 
-#include "ray_octree_traversal_simd.h"
+#include "octree_traversal_simd.h"
 
-#include "../utils.h"
-#include "../simd.h"
+#include <utils/utils.h>
+#include <utils/simd.h>
 
 #include <glm/glm.hpp>
 

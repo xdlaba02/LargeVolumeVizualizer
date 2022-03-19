@@ -34,4 +34,7 @@ add_executable(process src/process.cc)
 
 target_link_libraries_system(vizualize glm glfw OpenGL::GL Vc)
 
+target_include_directories(vizualize PUBLIC src)
+target_include_directories(process PUBLIC src)
+
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)

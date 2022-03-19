@@ -1,15 +1,16 @@
 
-#include "tree_volume/tree_volume.h"
-#include "tree_volume/renderer.h"
-#include "tree_volume/renderer_simd.h"
-#include "tree_volume/renderer_packlet.h"
-#include "linear_gradient.h"
-#include "integrator.h"
-#include "preintegrated_transfer_function.h"
 #include "vizualize_args.h"
 #include "glfw.h"
-#include "intersection.h"
-#include "ray_generator.h"
+
+#include <tree_volume/tree_volume.h>
+#include <tree_volume/renderer.h>
+#include <tree_volume/renderer_simd.h>
+#include <tree_volume/renderer_packlet.h>
+#include <tree_volume/integrator.h>
+
+#include <utils/linear_gradient.h>
+#include <utils/preintegrated_transfer_function.h>
+#include <utils/ray_generator.h>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>

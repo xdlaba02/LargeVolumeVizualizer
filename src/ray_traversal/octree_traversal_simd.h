@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../utils.h"
-#include "../simd.h"
+#include <utils/utils.h>
+#include <utils/simd.h>
 
 #include <glm/glm.hpp>
 

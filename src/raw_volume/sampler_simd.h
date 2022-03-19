@@ -1,6 +1,6 @@
 #include "raw_volume.h"
 
-#include "../simd.h"
+#include <utils/simd.h>
 
 template <typename T>
 inline simd::float_v sample(const RawVolume<T> &volume, const simd::float_v &x, const simd::float_v &y, const simd::float_v &z, const simd::float_m &mask) {

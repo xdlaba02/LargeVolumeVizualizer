@@ -1,6 +1,6 @@
 #pragma once
 
-#include "simd.h"
+#include <utils/simd.h>
 
 #include <glm/glm.hpp>
 

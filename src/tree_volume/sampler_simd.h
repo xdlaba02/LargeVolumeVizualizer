@@ -1,8 +1,8 @@
 #pragma once
 
 #include "tree_volume.h"
-#include "../morton.h"
-#include "../simd.h"
+#include <utils/morton.h>
+#include <utils/simd.h>
 
 // expects coordinates from interval <-.5f, TreeVolume<T>::SUBVOLUME_SIDE - .5f>
 // can safely handle values from interval (-1.f, TreeVolume<T>::SUBVOLUME_SIDE) due to padding and truncation used

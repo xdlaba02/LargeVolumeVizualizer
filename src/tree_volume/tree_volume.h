@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../mapped_file.h" // TODO move maping outside.
-#include "../endian.h"
+#include <utils/mapped_file.h>
+#include <utils/endian.h>
 
 #include <cstdint>
 #include <cstddef>
@@ -21,7 +21,7 @@ public:
 
   struct Info {
     struct Layer {
-      
+
       Layer(uint32_t width_in_blocks, uint32_t height_in_blocks, uint32_t depth_in_blocks):
         width_in_blocks(width_in_blocks),
         height_in_blocks(height_in_blocks),

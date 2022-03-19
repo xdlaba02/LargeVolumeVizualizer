@@ -1,9 +1,11 @@
 
-#include "raw_volume/raw_volume.h"
-#include "tree_volume/tree_volume.h"
-#include "mapped_file.h"
-#include "morton.h"
-#include "endian.h"
+#include <raw_volume/raw_volume.h>
+
+#include <tree_volume/tree_volume.h>
+
+#include <utils/mapped_file.h>
+#include <utils/morton.h>
+#include <utils/endian.h>
 
 #include <iostream>
 #include <fstream>

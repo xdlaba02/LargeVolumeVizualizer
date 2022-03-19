@@ -2,11 +2,12 @@
 
 #include "tree_volume.h"
 #include "sampler.h"
-#include "ray_octree_traversal_simd.h"
 
-#include "../intersection_simd.h"
-#include "../utils.h"
-#include "../simd.h"
+#include <ray_traversal/octree_traversal_simd.h>
+#include <ray_traversal/intersection_simd.h>
+
+#include <utils/utils.h>
+#include <utils/simd.h>
 
 #include <glm/glm.hpp>
 

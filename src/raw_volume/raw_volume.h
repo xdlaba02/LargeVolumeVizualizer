@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../mapped_file.h"
-#include "../endian.h"
+#include <utils/mapped_file.h>
+#include <utils/endian.h>
 
 #include <cstdint>
 
