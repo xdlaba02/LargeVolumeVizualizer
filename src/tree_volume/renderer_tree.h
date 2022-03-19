@@ -16,22 +16,21 @@
 #include <array>
 
 template <typename T, typename TransferFunctionType>
-glm::vec4 render(const TreeVolume<T> &volume, const Ray &ray, float step, const TransferFunctionType &transfer_function) {
-  float tmin {};
-  float tmax {};
-
-  intersect_aabb_ray(ray.origin, ray.direction_inverse, {0.f, 0.f, 0.f}, { volume.info.width_frac, volume.info.height_frac, volume.info.depth_frac}, tmin, tmax);
-
+glm::vec4 render_tree(const TreeVolume<T> &volume, const Ray &ray, float step, const TransferFunctionType &transfer_function) {
   glm::vec4 dst(0.f, 0.f, 0.f, 1.f);
 
-  if (tmin < tmax) {
+  RayRange range {};
+
+  intersect_aabb_ray(ray.origin, ray.direction_inverse, {0.f, 0.f, 0.f}, { volume.info.width_frac, volume.info.height_frac, volume.info.depth_frac}, range.min, range.max);
+
+
+  if (range.min < range.max) {
 
     // First slab in infinitely small because we want to initialize start value with first encountered value without producing output
-    float slab_start_t = tmin;
-    float slab_end_t = tmin;
-    float slab_start_value = 0.f;
+    RayRange slab_range { range.min, range.min };
+    float slab_start_value;
 
-    ray_octree_traversal(ray, { tmin, tmax }, { 0.f, 0.f, 0.f }, 0, [&](const RayRange &range, const glm::vec3 &cell, uint32_t layer) {
+    ray_octree_traversal(ray, range, { 0.f, 0.f, 0.f }, 0, [&](const RayRange &range, const glm::vec3 &cell, uint32_t layer) {
 
       // Early ray termination
       if (dst.a < 0.01f) {
@@ -39,7 +38,7 @@ glm::vec4 render(const TreeVolume<T> &volume, const Ray &ray, float step, const 
       }
 
       // Next step does not intersect the block
-      if (slab_end_t >= range.max) {
+      if (slab_range.max >= range.max) {
         return false;
       }
 
@@ -50,8 +49,8 @@ glm::vec4 render(const TreeVolume<T> &volume, const Ray &ray, float step, const 
       if (block.x >= volume.info.layers[layer_index].width_in_blocks
       || (block.y >= volume.info.layers[layer_index].height_in_blocks)
       || (block.z >= volume.info.layers[layer_index].depth_in_blocks)) {
-        slab_start_t = range.max;
-        slab_end_t = range.max;
+        slab_range.min = range.max;
+        slab_range.max = range.max;
         return false;
       }
 
@@ -64,22 +63,22 @@ glm::vec4 render(const TreeVolume<T> &volume, const Ray &ray, float step, const 
 
       // Empty space skipping
       if (node_rgba.a == 0.f) {
-        blend(transfer_function(slab_start_value, node.min), dst, slab_end_t - slab_start_t); // finish previous step with block value
+        blend(transfer_function(slab_start_value, node.min), dst, slab_range.max - slab_range.min); // finish previous step with block value
 
-        slab_start_t = range.max;
-        slab_end_t = range.max;
+        slab_range.min = range.max;
+        slab_range.max = range.max;
 
         return false;
       }
 
       // Fast integration of uniform space
       if (node.min == node.max) {
-        blend(transfer_function(slab_start_value, node.min), dst, slab_end_t - slab_start_t); // finish previous step with block value
-        blend(node_rgba, dst, range.max - slab_end_t); // blend the rest of the block
+        blend(transfer_function(slab_start_value, node.min), dst, slab_range.max - slab_range.min); // finish previous step with block value
+        blend(node_rgba, dst, range.max - slab_range.max); // blend the rest of the block
 
         slab_start_value = node.min;
-        slab_start_t = range.max;
-        slab_end_t = range.max + stepsize;
+        slab_range.min = range.max;
+        slab_range.max = range.max + stepsize;
 
         return false;
       }
@@ -90,8 +89,8 @@ glm::vec4 render(const TreeVolume<T> &volume, const Ray &ray, float step, const 
       }
 
       // Numeric integration
-      while (slab_end_t < range.max) {
-        glm::vec3 pos = ray.origin + ray.direction * slab_end_t;
+      while (slab_range.max < range.max) {
+        glm::vec3 pos = ray.origin + ray.direction * slab_range.max;
 
         glm::vec3 in_block = (pos - cell) * approx_exp2(layer) * float(TreeVolume<T>::SUBVOLUME_SIDE);
 
@@ -126,11 +125,11 @@ glm::vec4 render(const TreeVolume<T> &volume, const Ray &ray, float step, const 
 
 #endif
 
-        blend(src, dst, slab_end_t - slab_start_t);
+        blend(src, dst, slab_range.max - slab_range.min);
 
         slab_start_value = slab_end_value;
-        slab_start_t = slab_end_t;
-        slab_end_t = slab_end_t + stepsize;
+        slab_range.min = slab_range.max;
+        slab_range.max = slab_range.max + stepsize;
       }
 
       return false;

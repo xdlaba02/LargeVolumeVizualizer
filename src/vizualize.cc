@@ -3,12 +3,12 @@
 #include "glfw.h"
 
 #include <tree_volume/tree_volume.h>
-#include <tree_volume/renderer.h>
-#include <tree_volume/renderer_simd.h>
-#include <tree_volume/renderer_packlet.h>
-#include <tree_volume/integrator.h>
-#include <tree_volume/integrator_simd.h>
-#include <tree_volume/integrator_raster.h>
+#include <tree_volume/renderer_tree.h>
+#include <tree_volume/renderer_tree_simd.h>
+#include <tree_volume/renderer_tree_packlet.h>
+#include <tree_volume/renderer_layer.h>
+#include <tree_volume/renderer_layer_simd.h>
+#include <tree_volume/renderer_layer_dda.h>
 
 #include <utils/linear_gradient.h>
 #include <utils/preintegrated_transfer_function.h>
@@ -178,6 +178,8 @@ int main(int argc, char *argv[]) {
 
     RayGenerator ray_generator(window.width(), window.height(), 45.f);
 
+    float step = 0.001f;
+
     #pragma omp parallel for schedule(dynamic)
     for (uint32_t y = 0; y < window.height(); y += simd::len) {
       for (uint32_t x = 0; x < window.width(); x += simd::len) {
@@ -193,9 +195,10 @@ int main(int argc, char *argv[]) {
             glm::vec3 dir = ray_transform * ray_generator(x + xx, y + yy);
 
             /*
-            glm::vec4 output = integrate_raster(volume, ray_origin, dir, 0, 0.001f, transfer_function_scalar);
+            glm::vec4 output = render_layer(volume, { ray_origin, dir, 1.f / dir }, 0, step, transfer_function_scalar);
+            glm::vec4 output = render_tree(volume, { ray_origin, dir, 1.f / dir }, step, transfer_function_scalar);
             */
-            glm::vec4 output = render(volume, { ray_origin, dir, 1.f / dir }, 0.001f, transfer_function_scalar);
+            glm::vec4 output = render_layer_dda(volume, { ray_origin, dir, 1.f / dir }, 0, step, transfer_function_scalar); // FIXME not working again
             output_packlet[yy].x[xx] = output.x;
             output_packlet[yy].y[xx] = output.y;
             output_packlet[yy].z[xx] = output.z;
@@ -209,11 +212,11 @@ int main(int argc, char *argv[]) {
 
           ray_packlet[yy] = { ray_origin, ray_direction, simd::float_v(1.f) / ray_direction };
 
-          //output_packlet[yy] = render(volume, { ray_origin, ray_direction, simd::float_v(1.f) / ray_direction }, 0.001f, mask_packlet[yy], transfer_function);
-          //output_packlet[yy] = integrate(volume, ray_origin, ray_direction, mask_packlet[yy], 0, 0.001f, transfer_function);
+          //output_packlet[yy] = render_tree(volume, ray_packlet[yy], step, mask_packlet[yy], transfer_function);
+          //output_packlet[yy] = render_layer(volume, ray_packlet[yy], mask_packlet[yy], 0, step, transfer_function);
         }
 
-        //output_packlet = render(volume, ray_packlet, 0.001f, mask_packlet, transfer_function);
+        //output_packlet = render_tree(volume, ray_packlet, step, mask_packlet, transfer_function);
 
         for (uint32_t yy = 0; yy < simd::len; yy++) {
           output_packlet[yy].r *= 255.f;

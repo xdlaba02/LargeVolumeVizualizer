@@ -14,26 +14,25 @@
 #include <cstdint>
 
 template <typename T, typename TransferFunctionType>
-glm::vec4 integrate_raster(const TreeVolume<T> &volume, const glm::vec3 &origin, const glm::vec3 &direction, uint8_t layer, float step, const TransferFunctionType &transfer_function) {
-  RayRange range {};
-
-  intersect_aabb_ray(origin, 1.f / direction, {0.f, 0.f, 0.f}, { volume.info.width_frac, volume.info.height_frac, volume.info.depth_frac}, range.min, range.max);
-
+glm::vec4 render_layer_dda(const TreeVolume<T> &volume, const Ray &ray, uint8_t layer, float step, const TransferFunctionType &transfer_function) {
   glm::vec4 dst(0.f, 0.f, 0.f, 1.f);
 
+  RayRange range {};
+
+  intersect_aabb_ray(ray.origin, ray.direction_inverse, {0.f, 0.f, 0.f}, { volume.info.width_frac, volume.info.height_frac, volume.info.depth_frac}, range.min, range.max);
+
   if (range.min < range.max) {
+    float stepsize = step * approx_exp2(layer);
 
     // First slab in infinitely small because we want to initialize start value with first encountered value without producing output
     RayRange slab_range { range.min, range.min };
-    float slab_start_value = 0.f;
-
-    float stepsize = step * approx_exp2(layer);
+    float slab_start_value {};
 
     uint8_t layer_index = std::size(volume.info.layers) - 1 - layer;
 
-    Ray ray { origin * approx_exp2(layer_index), direction * approx_exp2(layer_index), 1.f / (direction * approx_exp2(layer_index)) };
+    Ray scaled_ray { ray.origin * approx_exp2(layer_index), ray.direction * approx_exp2(layer_index), 1.f / (ray.direction * approx_exp2(layer_index)) };
 
-    auto kernel = [&](const RayRange &range, const glm::vec<3, uint32_t> &block) {
+    ray_raster_traversal(scaled_ray, range, [&](const RayRange &range, const glm::vec<3, uint32_t> &block) {
 
       // Early ray termination
       if (dst.a < 0.01f) {
@@ -81,7 +80,7 @@ glm::vec4 integrate_raster(const TreeVolume<T> &volume, const glm::vec3 &origin,
 
       // Numeric integration
       while (slab_range.max < range.max) {
-        glm::vec3 pos = ray.origin + ray.direction * slab_range.max;
+        glm::vec3 pos = scaled_ray.origin + scaled_ray.direction * slab_range.max;
 
         glm::vec3 in_block = (pos - glm::vec3(block)) * float(TreeVolume<T>::SUBVOLUME_SIDE);
 
@@ -99,9 +98,7 @@ glm::vec4 integrate_raster(const TreeVolume<T> &volume, const glm::vec3 &origin,
       }
 
       return true;
-    };
-
-     ray_raster_traversal(ray, range, kernel);
+    });
   }
 
   return dst;
