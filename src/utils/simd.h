@@ -19,8 +19,9 @@ namespace simd {
     b(mask) = c;
   }
 
-  template <uint32_t D, typename T>
-  inline T fast_div(const T &n) {
-    return (n * FastDiv<typename T::value_type, D>::MULT) >> FastDiv<typename T::value_type, D>::SHIFT;
+  template <typename T, uint32_t DENOM>
+  inline T fast_div(const T &nom) {
+    using ValueType = typename T::value_type;
+    return (nom * FAST_DIV_MULT<ValueType, DENOM>) >> FAST_DIV_SHIFT<ValueType, DENOM>;
   }
 };

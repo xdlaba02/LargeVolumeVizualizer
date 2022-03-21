@@ -15,14 +15,13 @@
 
 #include <array>
 
-template <typename T, typename TransferFunctionType>
-glm::vec4 render_tree(const TreeVolume<T> &volume, const Ray &ray, float step, const TransferFunctionType &transfer_function) {
+template <typename T, typename TransferFunctionType, typename RecursePredicate>
+glm::vec4 render_tree(const TreeVolume<T> &volume, const Ray &ray, float step, const TransferFunctionType &transfer_function, const RecursePredicate &recurse_predicate) {
   glm::vec4 dst(0.f, 0.f, 0.f, 1.f);
 
   RayRange range {};
 
   intersect_aabb_ray(ray.origin, ray.direction_inverse, {0.f, 0.f, 0.f}, { volume.info.width_frac, volume.info.height_frac, volume.info.depth_frac}, range.min, range.max);
-
 
   if (range.min < range.max) {
 
@@ -83,8 +82,7 @@ glm::vec4 render_tree(const TreeVolume<T> &volume, const Ray &ray, float step, c
         return false;
       }
 
-      // Recurse condition
-      if (layer_index > 0) {
+      if (recurse_predicate(cell, layer)) {
         return true;
       }
 

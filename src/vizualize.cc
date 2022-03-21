@@ -44,28 +44,58 @@ int main(int argc, char *argv[]) {
   TreeVolume<uint8_t> volume(processed_volume, processed_metadata, width, height, depth);
 
   std::map<float, glm::vec3> color_map {
-    #if 1
+#if 0
     {80.f,  {0.75f, 0.5f, 0.25f}},
     {82.f,  {1.00f, 1.0f, 0.85f}}
-    #else
-    {0.f,  {1.00f, 0.0f, 0.0f}},
-    {89.f,  {0.00f, 1.0f, 0.0f}},
-    {178.f,  {0.00f, 0.0f, 1.0f}},
-    #endif
+#else
+    {0.f,   {1.0f, 0.0f, 0.0f}},
+    {1.f,   {1.0f, 0.5f, 0.5f}},
+
+    {2.f,   {1.0f, 1.0f, 0.0f}},
+    {3.f,   {1.0f, 1.0f, 0.5f}},
+
+    {4.f,   {0.0f, 1.0f, 0.0f}},
+    {5.f,   {0.5f, 1.0f, 0.5f}},
+
+    {6.f,   {0.0f, 1.0f, 1.0f}},
+    {7.f,   {0.5f, 1.0f, 1.0f}},
+
+    {8.f,   {0.0f, 0.0f, 1.0f}},
+    {9.f,   {0.5f, 0.5f, 1.0f}},
+
+    {10.f,   {1.0f, 0.0f, 1.0f}},
+    {11.f,   {1.0f, 0.5f, 1.0f}},
+
+    {12.f,   {1.0f, 0.0f, 0.0f}},
+    {13.f,   {1.0f, 0.5f, 0.5f}},
+
+    {14.f,   {1.0f, 1.0f, 0.0f}},
+    {15.f,   {1.0f, 1.0f, 0.5f}},
+
+    {16.f,   {0.0f, 1.0f, 0.0f}},
+    {17.f,   {0.5f, 1.0f, 0.5f}},
+
+    {18.f,   {0.0f, 1.0f, 1.0f}},
+    {19.f,   {0.5f, 1.0f, 1.0f}},
+
+    {20.f,   {0.0f, 0.0f, 1.0f}},
+    {21.f,   {0.5f, 0.5f, 1.0f}},
+
+    {22.f,   {1.0f, 0.0f, 1.0f}},
+    {23.f,   {1.0f, 0.5f, 1.0f}},
+#endif
   };
 
   std::map<float, float> alpha_map {
-    #if 1
+#if 0
     {40.f,  000.f},
     {60.f,  001.f},
     {63.f,  005.f},
     {80.f,  000.f},
     {82.f,  100.f},
-    #else
-    {0.f,   0.f},
-    {89.f,  5.f},
-    {178.f, 0.f},
-    #endif
+#else
+    {0.f,   10.f},
+#endif
   };
 
   PreintegratedTransferFunction<uint8_t> preintegrated_r([&](float v){ return linear_gradient(color_map, v).r; });
@@ -165,7 +195,7 @@ int main(int argc, char *argv[]) {
     // TODO hide transforms into object and camera class
     // by default, the volume is rendered in the interval [0, volume.info.frac]
     glm::mat4 model = glm::translate(glm::mat4(1.f), volume_pos)
-                    * glm::rotate(glm::mat4(1.f), 0.f, glm::vec3(0.f, 1.f, 0.f))
+                    * glm::rotate(glm::mat4(1.f), glm::radians(180.f), glm::vec3(0.f, 1.f, 0.f))
                     * glm::rotate(glm::mat4(1.f), glm::radians(90.f), glm::vec3(1.f, 0.f, 0.f))
                     * glm::translate(glm::mat4(1.f), glm::vec3(-0.5f))
                     * glm::scale(glm::mat4(1.f), volume_size);
@@ -195,10 +225,20 @@ int main(int argc, char *argv[]) {
             glm::vec3 dir = ray_transform * ray_generator(x + xx, y + yy);
 
             /*
+            glm::vec4 output = render_layer_dda(volume, { ray_origin, dir, 1.f / dir }, 0, step, transfer_function_scalar);
             glm::vec4 output = render_layer(volume, { ray_origin, dir, 1.f / dir }, 0, step, transfer_function_scalar);
-            glm::vec4 output = render_tree(volume, { ray_origin, dir, 1.f / dir }, step, transfer_function_scalar);
             */
-            glm::vec4 output = render_layer_dda(volume, { ray_origin, dir, 1.f / dir }, 0, step, transfer_function_scalar); // FIXME not working again
+            glm::vec4 output = render_tree(volume, { ray_origin, dir, 1.f / dir }, step, transfer_function_scalar, [&](const glm::vec3 &cell, uint8_t layer) {
+              float child_size = approx_exp2(-layer - 1);
+
+              float block_size = glm::length(volume_size * child_size);
+              float block_distance = glm::length(volume_size * (ray_origin - cell + child_size));
+
+              float perceived_size = block_size / block_distance;
+
+              return layer < std::size(volume.info.layers) - 1 && perceived_size > 0.05f;
+            });
+
             output_packlet[yy].x[xx] = output.x;
             output_packlet[yy].y[xx] = output.y;
             output_packlet[yy].z[xx] = output.z;

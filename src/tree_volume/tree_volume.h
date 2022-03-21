@@ -59,7 +59,7 @@ public:
           ++depth_in_blocks  >>= 1;
         }
 
-        layers.emplace_back(width, height, depth);
+        layers.emplace_back(width_in_blocks, height_in_blocks, depth_in_blocks);
         layer_offsets.push_back(size_in_blocks);
 
         float octree_size = (1 << (std::size(layers) - 1)) * SUBVOLUME_SIDE;
