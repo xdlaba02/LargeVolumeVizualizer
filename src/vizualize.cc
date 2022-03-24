@@ -3,12 +3,13 @@
 #include "glfw.h"
 
 #include <tree_volume/tree_volume.h>
-#include <tree_volume/renderer_tree.h>
-#include <tree_volume/renderer_tree_simd.h>
-#include <tree_volume/renderer_tree_packlet.h>
-#include <tree_volume/renderer_layer.h>
-#include <tree_volume/renderer_layer_simd.h>
-#include <tree_volume/renderer_layer_dda.h>
+
+#include <renderers/tree.h>
+#include <renderers/tree_simd.h>
+#include <renderers/tree_packlet.h>
+#include <renderers/tree_layer.h>
+#include <renderers/tree_layer_simd.h>
+#include <renderers/tree_layer_dda.h>
 
 #include <utils/linear_gradient.h>
 #include <utils/preintegrated_transfer_function.h>
@@ -44,7 +45,7 @@ int main(int argc, char *argv[]) {
   TreeVolume<uint8_t> volume(processed_volume, processed_metadata, width, height, depth);
 
   std::map<float, glm::vec3> color_map {
-#if 0
+#if 1
     {80.f,  {0.75f, 0.5f, 0.25f}},
     {82.f,  {1.00f, 1.0f, 0.85f}}
 #else
@@ -87,14 +88,14 @@ int main(int argc, char *argv[]) {
   };
 
   std::map<float, float> alpha_map {
-#if 0
+#if 1
     {40.f,  000.f},
     {60.f,  001.f},
     {63.f,  005.f},
     {80.f,  000.f},
     {82.f,  100.f},
 #else
-    {0.f,   10.f},
+    {0.f,   10000.f},
 #endif
   };
 
@@ -104,7 +105,7 @@ int main(int argc, char *argv[]) {
   PreintegratedTransferFunction<uint8_t> preintegrated_a([&](float v){ return linear_gradient(alpha_map, v); });
 
   auto transfer_function = [&](const auto &v0, const auto &v1, const auto &mask) {
-    return Vec4Vec(preintegrated_r(v0, v1, mask), preintegrated_g(v0, v1, mask), preintegrated_b(v0, v1, mask), preintegrated_a(v0, v1, mask));
+    return simd::vec4(preintegrated_r(v0, v1, mask), preintegrated_g(v0, v1, mask), preintegrated_b(v0, v1, mask), preintegrated_a(v0, v1, mask));
   };
 
   auto transfer_function_scalar = [&](const auto &v0, const auto &v1) {
@@ -112,6 +113,8 @@ int main(int argc, char *argv[]) {
   };
 
   GLFW::Window window(1920, 1080, "Volumetric Vizualizer");
+
+  std::vector<uint8_t> raster(window.width() * window.height() * 3);
 
   auto prev_time = std::chrono::steady_clock::now();
 
@@ -128,8 +131,30 @@ int main(int argc, char *argv[]) {
 
   glm::vec3 volume_size(1.f / volume.info.width_frac, 1.f / volume.info.height_frac, 1.f / volume.info.depth_frac);
 
+  bool imgui_show = true;
+
+  float step = 0.001f;
+  float lod = 0.05f;
+  float fov = 45.f;
+  float skip_thresh = 0.01f;
+
   float t = 0.f;
   while (!window.shouldClose()) {
+
+    window.makeContextCurrent();
+
+
+    ImGui_ImplOpenGL2_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+
+    if (ImGui::Begin("Configuration", &imgui_show, 0)) {
+      ImGui::SliderFloat("Step", &step, 0.0001f, 0.1f, "%.4f", ImGuiSliderFlags_Logarithmic);
+      ImGui::SliderFloat("Level of Detail", &lod, 0.f, 1.f, "%.2f", ImGuiSliderFlags_Logarithmic);
+      ImGui::SliderFloat("Camera FOV", &fov, 0.f, 180.f, "%.0f");
+      ImGui::SliderFloat("Block skip threshold", &skip_thresh, 0.f, 1.f, "%.2f");
+      ImGui::End();
+    }
 
     auto time = std::chrono::steady_clock::now();
     float delta = std::chrono::duration_cast<std::chrono::milliseconds>(time - prev_time).count() / 1000.f;
@@ -143,15 +168,23 @@ int main(int argc, char *argv[]) {
 
       window.getCursor(pos.x, pos.y);
 
-      constexpr float sensitivity = 0.1f;
-      glm::vec2 offset = (pos - prev_pos) * sensitivity;
+      glm::vec2 offset = pos - prev_pos;
 
       prev_pos = pos;
 
-      yaw   += offset.x;
-      pitch -= offset.y;
+      if (window.getMouseButton(GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS) {
+        window.setCursorMode(GLFW_CURSOR_DISABLED);
 
-      pitch = std::clamp(pitch, -89.f, 89.f);
+        constexpr float sensitivity = 0.1f;
+
+        yaw   += offset.x * sensitivity;
+        pitch -= offset.y * sensitivity;
+
+        pitch = std::clamp(pitch, -89.f, 89.f);
+      }
+      else {
+        window.setCursorMode(GLFW_CURSOR_NORMAL);
+      }
     }
 
     glm::vec3 camera_front = glm::normalize(glm::vec3{
@@ -195,7 +228,7 @@ int main(int argc, char *argv[]) {
     // TODO hide transforms into object and camera class
     // by default, the volume is rendered in the interval [0, volume.info.frac]
     glm::mat4 model = glm::translate(glm::mat4(1.f), volume_pos)
-                    * glm::rotate(glm::mat4(1.f), glm::radians(180.f), glm::vec3(0.f, 1.f, 0.f))
+                    * glm::rotate(glm::mat4(1.f), t, glm::vec3(0.f, 1.f, 0.f))
                     * glm::rotate(glm::mat4(1.f), glm::radians(90.f), glm::vec3(1.f, 0.f, 0.f))
                     * glm::translate(glm::mat4(1.f), glm::vec3(-0.5f))
                     * glm::scale(glm::mat4(1.f), volume_size);
@@ -206,9 +239,7 @@ int main(int argc, char *argv[]) {
 
     glm::vec3 ray_origin = ray_transform * glm::vec4(0.f, 0.f, 0.f, 1.f);
 
-    RayGenerator ray_generator(window.width(), window.height(), 45.f);
-
-    float step = 0.001f;
+    RayGenerator ray_generator(window.width(), window.height(), fov);
 
     #pragma omp parallel for schedule(dynamic)
     for (uint32_t y = 0; y < window.height(); y += simd::len) {
@@ -220,7 +251,7 @@ int main(int argc, char *argv[]) {
 
         for (uint32_t yy = 0; yy < simd::len && y + yy < window.height(); yy++) {
 
-          Vec3Vec ray_direction;
+          simd::vec3 ray_direction;
           for (uint32_t xx = 0; xx < simd::len && x + xx < window.width(); xx++) {
             glm::vec3 dir = ray_transform * ray_generator(x + xx, y + yy);
 
@@ -228,7 +259,7 @@ int main(int argc, char *argv[]) {
             glm::vec4 output = render_layer_dda(volume, { ray_origin, dir, 1.f / dir }, 0, step, transfer_function_scalar);
             glm::vec4 output = render_layer(volume, { ray_origin, dir, 1.f / dir }, 0, step, transfer_function_scalar);
             */
-            glm::vec4 output = render_tree(volume, { ray_origin, dir, 1.f / dir }, step, transfer_function_scalar, [&](const glm::vec3 &cell, uint8_t layer) {
+            glm::vec4 output = render_tree(volume, { ray_origin, dir, 1.f / dir }, step, skip_thresh, transfer_function_scalar, [&](const glm::vec3 &cell, uint8_t layer) {
               float child_size = approx_exp2(-layer - 1);
 
               float block_size = glm::length(volume_size * child_size);
@@ -236,7 +267,7 @@ int main(int argc, char *argv[]) {
 
               float perceived_size = block_size / block_distance;
 
-              return layer < std::size(volume.info.layers) - 1 && perceived_size > 0.05f;
+              return layer < std::size(volume.info.layers) - 1 && perceived_size > lod;
             });
 
             output_packlet[yy].x[xx] = output.x;
@@ -265,16 +296,23 @@ int main(int argc, char *argv[]) {
 
           for (uint32_t xx = 0; xx < simd::len; xx++) {
             if (mask_packlet[yy][xx]) {
-              window.raster(x + xx, y + yy, 0) = output_packlet[yy].r[xx];
-              window.raster(x + xx, y + yy, 1) = output_packlet[yy].g[xx];
-              window.raster(x + xx, y + yy, 2) = output_packlet[yy].b[xx];
+              raster[(y + yy) * window.width() * 3 + (x + xx) * 3 + 0] = output_packlet[yy].r[xx];
+              raster[(y + yy) * window.width() * 3 + (x + xx) * 3 + 1] = output_packlet[yy].g[xx];
+              raster[(y + yy) * window.width() * 3 + (x + xx) * 3 + 2] = output_packlet[yy].b[xx];
             }
           }
         }
       }
     }
 
+    ImGui::Render();
+
+    glDrawPixels(window.width(), window.height(), GL_RGB, GL_UNSIGNED_BYTE, raster.data());
+
+    ImGui_ImplOpenGL2_RenderDrawData(ImGui::GetDrawData());
+
     window.swapBuffers();
-    window.pollEvents();
+
+    GLFW::pollEvents();
   }
 }

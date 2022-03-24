@@ -1,8 +1,7 @@
 #pragma once
 
-#include "tree_volume.h"
-#include "sampler.h"
-#include "blend_simd.h"
+#include <tree_volume/tree_volume.h>
+#include <tree_volume/sampler_simd.h>
 
 #include <ray/traversal_octree_packlet.h>
 #include <ray/intersection.h>
@@ -62,7 +61,7 @@ Vec4Packlet render_tree(const TreeVolume<T> &volume, const RayPacklet &ray, floa
           continue;
         }
 
-        Vec3Vec block = cell[j] * simd::float_v(approx_exp2(layer));
+        simd::vec3 block = cell[j] * simd::float_v(approx_exp2(layer));
 
         simd::float_m ray_outside = mask[j] && ((block.x >= volume.info.layers[layer_index].width_in_blocks)
                                                     || (block.y >= volume.info.layers[layer_index].height_in_blocks)
@@ -93,7 +92,7 @@ Vec4Packlet render_tree(const TreeVolume<T> &volume, const RayPacklet &ray, floa
           }
         }
 
-        Vec4Vec node_rgba = transfer_function(node_min, node_max, mask[j]);
+        simd::vec4 node_rgba = transfer_function(node_min, node_max, mask[j]);
 
         simd::float_m block_empty = mask[j] && (node_rgba.a == 0.f);
 
@@ -136,9 +135,9 @@ Vec4Packlet render_tree(const TreeVolume<T> &volume, const RayPacklet &ray, floa
 
         // Numeric integration
         for (mask[j] = mask[j] && (slab_range[j].max < range[j].max); mask[j].isNotEmpty(); mask[j] = mask[j] && (slab_range[j].max < range[j].max)) {
-          Vec3Vec pos = ray[j].origin + ray[j].direction * slab_range[j].max;
+          simd::vec3 pos = ray[j].origin + ray[j].direction * slab_range[j].max;
 
-          Vec3Vec in_block = (pos - cell[j]) * simd::float_v(approx_exp2(layer)) * simd::float_v(TreeVolume<T>::SUBVOLUME_SIDE);
+          simd::vec3 in_block = (pos - cell[j]) * simd::float_v(approx_exp2(layer)) * simd::float_v(TreeVolume<T>::SUBVOLUME_SIDE);
 
           simd::float_v slab_end_value;
 

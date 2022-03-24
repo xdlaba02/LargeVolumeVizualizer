@@ -10,9 +10,12 @@
 
 #include <array>
 
+template <typename F>
+concept RayOctreeTraversalCallback = std::invocable<F, const RayRange &, const glm::vec3 &, uint32_t>;
+
 // Interactive isosurface ray tracing of large octree volumes
 // https://www.researchgate.net/publication/310054812_Interactive_isosurface_ray_tracing_of_large_octree_volumes
-template <typename F>
+template <RayOctreeTraversalCallback F>
 void ray_octree_traversal(const Ray &ray, const RayRange &range, glm::vec3 cell, uint32_t layer, const F &callback) {
   if (callback(range, cell, layer)) {
     // TODO precompute?

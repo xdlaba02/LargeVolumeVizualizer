@@ -1,13 +1,13 @@
 #pragma once
 
-#include "tree_volume.h"
-#include "sampler.h"
-#include "blend.h"
+#include <tree_volume/tree_volume.h>
+#include <tree_volume/sampler.h>
 
 #include <ray/traversal_octree.h>
 #include <ray/intersection.h>
 
 #include <utils/utils.h>
+#include <utils/blend.h>
 
 #include <glm/glm.hpp>
 
@@ -16,12 +16,10 @@
 #include <array>
 
 template <typename T, typename TransferFunctionType, typename RecursePredicate>
-glm::vec4 render_tree(const TreeVolume<T> &volume, const Ray &ray, float step, const TransferFunctionType &transfer_function, const RecursePredicate &recurse_predicate) {
+glm::vec4 render_tree(const TreeVolume<T> &volume, const Ray &ray, float step, float terminate_thresh, const TransferFunctionType &transfer_function, const RecursePredicate &recurse_predicate) {
   glm::vec4 dst(0.f, 0.f, 0.f, 1.f);
 
-  RayRange range {};
-
-  intersect_aabb_ray(ray.origin, ray.direction_inverse, {0.f, 0.f, 0.f}, { volume.info.width_frac, volume.info.height_frac, volume.info.depth_frac}, range.min, range.max);
+  RayRange range = intersect_aabb_ray(ray, {0.f, 0.f, 0.f}, { volume.info.width_frac, volume.info.height_frac, volume.info.depth_frac});
 
   if (range.min < range.max) {
 
@@ -32,7 +30,7 @@ glm::vec4 render_tree(const TreeVolume<T> &volume, const Ray &ray, float step, c
     ray_octree_traversal(ray, range, { 0.f, 0.f, 0.f }, 0, [&](const RayRange &range, const glm::vec3 &cell, uint32_t layer) {
 
       // Early ray termination
-      if (dst.a < 0.01f) {
+      if (dst.a < terminate_thresh) {
         return false;
       }
 

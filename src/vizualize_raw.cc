@@ -2,7 +2,7 @@
 #include "glfw.h"
 
 #include <raw_volume/raw_volume.h>
-#include <raw_volume/renderer.h>
+#include <renderers/raw_volume.h>
 
 #include <utils/linear_gradient.h>
 #include <utils/preintegrated_transfer_function.h>
@@ -42,7 +42,7 @@ int main(int argc, char *argv[]) {
   RawVolume<uint8_t> volume(argv[1], width, height, depth);
 
   std::map<float, glm::vec3> color_map {
-    #if 0
+    #if 1
     {80.f,  {0.75f, 0.5f, 0.25f}},
     {82.f,  {1.00f, 1.0f, 0.85f}}
     #else
@@ -76,6 +76,8 @@ int main(int argc, char *argv[]) {
   };
 
   GLFW::Window window(640, 480, "Volumetric Vizualizer");
+
+  std::vector<uint8_t> raster(window.width() * window.height() * 3);
 
   auto prev_time = std::chrono::steady_clock::now();
 
@@ -177,13 +179,14 @@ int main(int argc, char *argv[]) {
         glm::vec3 dir = ray_transform * ray_generator(x, y);
         glm::vec4 output = render(volume, { ray_origin, dir, 1.f / dir }, step, transfer_function_scalar);
 
-        window.raster(x, y, 0) = output.r * 255;
-        window.raster(x, y, 1) = output.g * 255;
-        window.raster(x, y, 2) = output.b * 255;
+        raster[y * window.width() * 3 + x * 3 + 0] = output.r * 255;
+        raster[y * window.width() * 3 + x * 3 + 1] = output.g * 255;
+        raster[y * window.width() * 3 + x * 3 + 2] = output.b * 255;
       }
     }
 
+    window.makeContextCurrent();
     window.swapBuffers();
-    window.pollEvents();
+    GLFW::pollEvents();
   }
 }

@@ -7,3 +7,6 @@
 [submodule "external/Vc"]
 	path = external/Vc
 	url = git@github.com:VcDevel/Vc.git
+[submodule "external/imgui"]
+	path = external/imgui
+	url = git@github.com:ocornut/imgui.git

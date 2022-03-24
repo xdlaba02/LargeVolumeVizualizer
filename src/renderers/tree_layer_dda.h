@@ -1,8 +1,7 @@
 #pragma once
 
-#include "tree_volume.h"
-#include "sampler.h"
-#include "blend.h"
+#include <tree_volume/tree_volume.h>
+#include <tree_volume/sampler.h>
 
 #include <ray/traversal_raster.h>
 #include <ray/intersection.h>

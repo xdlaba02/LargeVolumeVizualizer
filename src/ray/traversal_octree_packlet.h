@@ -1,6 +1,6 @@
 #pragma once
 
-#include "traversal_octree_simd.h"
+#include "ray_simd.h"
 
 #include <utils/utils.h>
 #include <utils/simd.h>
@@ -12,15 +12,18 @@
 #include <array>
 
 // Sqaure packlet of simd::len * simd::len rays.
-using RayPacklet = std::array<RayVec, simd::len>;
+using RayPacklet = std::array<simd::Ray, simd::len>;
 using MaskPacklet = std::array<simd::float_m, simd::len>;
-using RayRangePacklet = std::array<RayRangeVec, simd::len>;
-using Vec3Packlet = std::array<Vec3Vec, simd::len>;
-using Vec4Packlet = std::array<Vec4Vec, simd::len>;
+using RayRangePacklet = std::array<simd::RayRange, simd::len>;
+using Vec3Packlet = std::array<simd::vec3, simd::len>;
+using Vec4Packlet = std::array<simd::vec4, simd::len>;
 using AxisPacklet = std::array<std::array<simd::uint32_v, 3>, simd::len>;
 using FloatPacklet = std::array<simd::float_v, simd::len>;
 
 template <typename F>
+concept RayOctreeTraversalPackletCallback = std::invocable<F, const RayPacklet &, const Vec3Packlet &, uint32_t, MaskPacklet>;
+
+template <RayOctreeTraversalPackletCallback F>
 void ray_octree_traversal(const RayPacklet &ray_packlet, const RayRangePacklet &range_packlet, Vec3Packlet cell_packlet, uint32_t layer, MaskPacklet mask_packlet, const F &callback) {
   callback(range_packlet, cell_packlet, layer, mask_packlet);
 

@@ -1,18 +1,17 @@
 #pragma once
 
-#include <glm/glm.hpp>
-#include <utils/simd.h>
+#include <utils/glm_simd.h>
 
-using Vec3Vec = glm::vec<3, simd::float_v>;
-using Vec4Vec = glm::vec<4, simd::float_v>;
+namespace simd {
+  struct Ray {
+    vec3 origin;
+    vec3 direction;
+    vec3 direction_inverse;
+  };
 
-struct RayVec {
-  Vec3Vec origin;
-  Vec3Vec direction;
-  Vec3Vec direction_inverse;
-};
+  struct RayRange {
+    float_v min;
+    float_v max;
+  };
 
-struct RayRangeVec {
-  simd::float_v min;
-  simd::float_v max;
-};
+}

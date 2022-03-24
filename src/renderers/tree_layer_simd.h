@@ -1,8 +1,7 @@
 #pragma once
 
-#include "tree_volume.h"
-#include "sampler_simd.h"
-#include "blend_simd.h"
+#include <tree_volume/tree_volume.h>
+#include <tree_volume/sampler_simd.h>
 
 #include <ray/ray_simd.h>
 #include <ray/intersection_simd.h>
@@ -12,10 +11,10 @@
 #include <cstdint>
 
 template <typename T, typename TransferFunctionType>
-glm::vec<4, simd::float_v> render_layer(const TreeVolume<T> &volume, const RayVec &ray, simd::float_m mask, uint8_t layer, float step, const TransferFunctionType &transfer_function) {
-  glm::vec<4, simd::float_v> dst(0.f, 0.f, 0.f, 1.f);
+simd::vec4 render_layer(const TreeVolume<T> &volume, const simd::Ray &ray, simd::float_m mask, uint8_t layer, float step, const TransferFunctionType &transfer_function) {
+  simd::vec4 dst(0.f, 0.f, 0.f, 1.f);
 
-  RayRangeVec range {};
+  simd::RayRange range {};
 
   intersect_aabb_ray(ray.origin, ray.direction_inverse, {0, 0, 0}, { volume.info.width_frac, volume.info.height_frac, volume.info.depth_frac}, range.min, range.max);
 
@@ -24,11 +23,11 @@ glm::vec<4, simd::float_v> render_layer(const TreeVolume<T> &volume, const RayVe
   if (!mask.isEmpty()) {
     simd::float_v stepsize = step * approx_exp2(layer);
 
-    RayRangeVec slab_range { range.min, range.min };
+    simd::RayRange slab_range { range.min, range.min };
     simd::float_v slab_start_value {};
 
     while (!mask.isEmpty()) {
-      glm::vec<3, simd::float_v> sample_pos = ray.origin + ray.direction * slab_range.max;
+      simd::vec3 sample_pos = ray.origin + ray.direction * slab_range.max;
 
       simd::float_v slab_end_value = sample(volume, sample_pos.x, sample_pos.y, sample_pos.z, layer, mask);
 

@@ -1,24 +1,26 @@
 #pragma once
 
-#include <utils/simd.h>
+#include "ray_simd.h"
 
-#include <glm/glm.hpp>
+inline simd::RayRange intersect_aabb_ray(const simd::Ray &ray, const glm::vec3 &min, const glm::vec3 &max) {
+  simd::vec3 tmins = (simd::vec3(min) - ray.origin) * ray.direction_inverse;
+  simd::vec3 tmaxs = (simd::vec3(max) - ray.origin) * ray.direction_inverse;
 
-inline void intersect_aabb_ray(const glm::vec<3, simd::float_v> &origin, const glm::vec<3, simd::float_v> &ray_direction_inverse, const glm::vec3 &min, const glm::vec3 &max, simd::float_v& tmin, simd::float_v& tmax) {
-  glm::vec<3, simd::float_v> tmins = (glm::vec<3, simd::float_v>(min) - origin) * ray_direction_inverse;
-  glm::vec<3, simd::float_v> tmaxs = (glm::vec<3, simd::float_v>(max) - origin) * ray_direction_inverse;
-
-  for (uint32_t i = 0; i < 3; ++i) {
-    simd::swap(tmins[i], tmaxs[i], ray_direction_inverse[i] < 0.f);
+  for (uint8_t i = 0; i < 3; ++i) {
+    simd::swap(tmins[i], tmaxs[i], ray.direction_inverse[i] < 0.f);
   }
 
-  tmin = tmins[0];
-  tmax = tmaxs[0];
+  simd::RayRange range {
+    tmins[0],
+    tmaxs[0]
+  };
 
-  for (uint32_t i = 1; i < 3; ++i) {
-    tmin(tmins[i] > tmin) = tmins[i];
-    tmax(tmaxs[i] < tmax) = tmaxs[i];
+  for (uint8_t i = 1; i < 3; ++i) {
+    range.min(tmins[i] > range.min) = tmins[i];
+    range.max(tmaxs[i] < range.max) = tmaxs[i];
   }
 
-  tmin(tmin < 0.f) = 0.f;
+  range.min(range.min < 0.f) = 0.f;
+
+  return range;
 }

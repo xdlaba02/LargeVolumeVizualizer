@@ -2,6 +2,10 @@
 
 #include <GLFW/glfw3.h>
 
+#include <imgui/imgui.h>
+#include <imgui/backends/imgui_impl_glfw.h>
+#include <imgui/backends/imgui_impl_opengl2.h>
+
 #include <cstdint>
 
 #include <vector>
@@ -22,15 +26,25 @@ public:
         throw std::runtime_error("Unable to create window!");
       }
 
-      glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+      //glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
       glfwMakeContextCurrent(m_window);
 
-      m_raster.resize(width * height * 3);
+      ImGui::CreateContext();
+
+      ImGui::StyleColorsDark();
+
+      ImGui_ImplGlfw_InitForOpenGL(m_window, true);
+      ImGui_ImplOpenGL2_Init();
     }
 
     ~Window() {
       glfwDestroyWindow(m_window);
+
+      ImGui_ImplOpenGL2_Shutdown();
+      ImGui_ImplGlfw_Shutdown();
+
+      ImGui::DestroyContext();
     }
 
     bool shouldClose() {
@@ -38,17 +52,23 @@ public:
     };
 
     void swapBuffers() {
-      glClear(GL_COLOR_BUFFER_BIT);
-      glDrawPixels(m_width, m_height, GL_RGB, GL_UNSIGNED_BYTE, m_raster.data());
       glfwSwapBuffers(m_window);
     }
 
-    void pollEvents() {
-      glfwPollEvents();
+    void makeContextCurrent() {
+      glfwMakeContextCurrent(m_window);
     }
 
-    int getKey(int key) {
+    int getKey(int key) const {
       return glfwGetKey(m_window, key);
+    }
+
+    int getMouseButton(int button) const {
+      return glfwGetMouseButton(m_window, button);
+    }
+
+    void setCursorMode(int mode) {
+      glfwSetInputMode(m_window, GLFW_CURSOR, mode);
     }
 
     void getCursor(float &x, float &y) {
@@ -62,10 +82,6 @@ public:
       glfwSetWindowShouldClose(m_window, shouldClose);
     }
 
-    uint8_t &raster(uint32_t x, uint32_t y, uint8_t c) {
-      return m_raster[y * m_width * 3 + x * 3 + c];
-    }
-
     uint32_t width() const { return m_width; }
     uint32_t height() const { return m_height; }
 
@@ -73,7 +89,6 @@ public:
     std::shared_ptr<GLFW> m_glfw;
     uint32_t m_width;
     uint32_t m_height;
-    std::vector<uint8_t> m_raster;
     GLFWwindow *m_window = nullptr;
   };
 
@@ -84,23 +99,28 @@ public:
     glfwTerminate();
   }
 
+  static void pollEvents() {
+    std::shared_ptr<GLFW> lock = instance();
+    glfwPollEvents();
+  }
+
 private:
-    static std::shared_ptr<GLFW> instance() {
-      static std::weak_ptr<GLFW> instance;
+  static std::shared_ptr<GLFW> instance() {
+    static std::weak_ptr<GLFW> instance;
 
-      std::shared_ptr<GLFW> res = instance.lock();
+    std::shared_ptr<GLFW> res = instance.lock();
 
-      if (!res) {
-          res = std::shared_ptr<GLFW>(new GLFW());
-          instance = res;
-      }
-
-      return res;
+    if (!res) {
+        res = std::shared_ptr<GLFW>(new GLFW());
+        instance = res;
     }
 
-    GLFW() {
-      if (!glfwInit()) {
-        throw std::runtime_error("Unable to initialize GLFW!");
-      }
+    return res;
+  }
+
+  GLFW() {
+    if (!glfwInit()) {
+      throw std::runtime_error("Unable to initialize GLFW!");
     }
+  }
 };

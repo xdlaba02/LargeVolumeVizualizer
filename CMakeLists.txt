@@ -13,17 +13,6 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -DNDEBUG")
 
 add_subdirectory(external)
 
-# include libraries headers as system to supress warnings
-function(target_link_libraries_system target)
-  set(libs ${ARGN})
-  foreach(lib ${libs})
-    get_target_property(lib_include_dirs ${lib} INTERFACE_INCLUDE_DIRECTORIES)
-    target_include_directories(${target} SYSTEM PRIVATE ${lib_include_dirs})
-    target_link_libraries(${target} ${lib})
-  endforeach(lib)
-endfunction(target_link_libraries_system)
-
-
 # ugly but easy, ok for smol project
 file(GLOB SRC_FILES CONFIGURE_DEPENDS src/*.cc)
 
@@ -34,8 +23,8 @@ add_executable(vizualize_raw src/vizualize_raw.cc)
 add_executable(process src/process.cc)
 add_executable(test_volume_generator test/test_volume_generator.cc)
 
-target_link_libraries_system(vizualize glm glfw OpenGL::GL Vc)
-target_link_libraries_system(vizualize_raw glm glfw OpenGL::GL Vc)
+target_link_libraries(vizualize glm imgui glfw OpenGL::GL Vc)
+target_link_libraries(vizualize_raw glm  imgui glfw OpenGL::GL Vc)
 
 target_include_directories(vizualize PUBLIC src)
 target_include_directories(vizualize_raw PUBLIC src)
