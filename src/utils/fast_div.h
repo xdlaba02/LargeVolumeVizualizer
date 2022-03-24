@@ -23,7 +23,7 @@ static consteval T fast_div_shift() {
   T shift = 0;
   uint64_t i = 0;
   while (i <= std::numeric_limits<T>::max() && shift < (sizeof(T) * 8) - 1) {
-    T val = T(T(i) * fast_div_mult(shift)) >> shift;
+    T val = T(T(i) * fast_div_mult<T, DENOM>(shift)) >> shift;
 
     if (val != (i / DENOM)) {
       if (i > best_i) {

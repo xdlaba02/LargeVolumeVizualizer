@@ -11,12 +11,10 @@
 #include <cstdint>
 
 template <typename T, typename TransferFunctionType>
-simd::vec4 render_layer(const TreeVolume<T> &volume, const simd::Ray &ray, simd::float_m mask, uint8_t layer, float step, const TransferFunctionType &transfer_function) {
+simd::vec4 integrate_tree_slab_layer_simd(const TreeVolume<T> &volume, const simd::Ray &ray, simd::float_m mask, uint8_t layer, float step, float terminate_thresh, const TransferFunctionType &transfer_function) {
   simd::vec4 dst(0.f, 0.f, 0.f, 1.f);
 
-  simd::RayRange range {};
-
-  intersect_aabb_ray(ray.origin, ray.direction_inverse, {0, 0, 0}, { volume.info.width_frac, volume.info.height_frac, volume.info.depth_frac}, range.min, range.max);
+  simd::RayRange range = intersect_aabb_ray(ray, {0, 0, 0}, { volume.info.width_frac, volume.info.height_frac, volume.info.depth_frac});
 
   mask = mask && range.min < range.max;
 
@@ -37,7 +35,7 @@ simd::vec4 render_layer(const TreeVolume<T> &volume, const simd::Ray &ray, simd:
       slab_range.min = slab_range.max;
       slab_range.max = slab_range.max + stepsize;
 
-      mask = mask && slab_range.max < range.max && dst.a > 1.f / 256.f;
+      mask = mask && slab_range.max < range.max && dst.a > terminate_thresh;
     }
   }
 

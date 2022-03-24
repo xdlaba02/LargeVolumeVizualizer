@@ -21,10 +21,10 @@ using AxisPacklet = std::array<std::array<simd::uint32_v, 3>, simd::len>;
 using FloatPacklet = std::array<simd::float_v, simd::len>;
 
 template <typename F>
-concept RayOctreeTraversalPackletCallback = std::invocable<F, const RayPacklet &, const Vec3Packlet &, uint32_t, MaskPacklet>;
+concept rayOctreeTraversalPackletCallback = std::invocable<F, const RayPacklet &, const Vec3Packlet &, uint8_t, MaskPacklet &>;
 
-template <RayOctreeTraversalPackletCallback F>
-void ray_octree_traversal(const RayPacklet &ray_packlet, const RayRangePacklet &range_packlet, Vec3Packlet cell_packlet, uint32_t layer, MaskPacklet mask_packlet, const F &callback) {
+template <typename F>
+void ray_octree_traversal(const RayPacklet &ray_packlet, const RayRangePacklet &range_packlet, Vec3Packlet cell_packlet, uint8_t layer, MaskPacklet mask_packlet, const F &callback) {
   callback(range_packlet, cell_packlet, layer, mask_packlet);
 
   bool should_recurse = false;
@@ -86,11 +86,11 @@ void ray_octree_traversal(const RayPacklet &ray_packlet, const RayRangePacklet &
     MaskPacklet child_in_range;
     bool packlet_not_empty = false;
 
-    for (uint32_t j = 0; j < simd::len; j++) {
+    for (uint8_t j = 0; j < simd::len; j++) {
 
-      for (uint32_t k = 0; k < simd::len; k++) {
+      for (uint8_t k = 0; k < simd::len; k++) {
         if (mask_packlet[j][k]) {
-          uint32_t axis = axis_packlet[j][i][k];
+          uint8_t axis = axis_packlet[j][i][k];
           child_range_packlet[j].max[k] = tcenter_packlet[j][axis][k];
         }
       }
@@ -104,15 +104,15 @@ void ray_octree_traversal(const RayPacklet &ray_packlet, const RayRangePacklet &
     if (packlet_not_empty) {
       ray_octree_traversal(ray_packlet, child_range_packlet, cell_packlet, layer + 1, child_in_range, callback);
 
-      for (uint32_t j = 0; j < simd::len; j++) {
+      for (uint8_t j = 0; j < simd::len; j++) {
         child_range_packlet[j].min = child_range_packlet[j].max;
       }
     }
 
-    for (uint32_t j = 0; j < simd::len; j++) {
-      for (uint32_t k = 0; k < simd::len; k++) {
+    for (uint8_t j = 0; j < simd::len; j++) {
+      for (uint8_t k = 0; k < simd::len; k++) {
         if (mask_packlet[j][k]) {
-          uint32_t axis = axis_packlet[j][i][k];
+          uint8_t axis = axis_packlet[j][i][k];
           cell_packlet[j][axis][k] = center_packlet[j][axis][k];
         }
       }
@@ -122,7 +122,7 @@ void ray_octree_traversal(const RayPacklet &ray_packlet, const RayRangePacklet &
   MaskPacklet child_in_range;
   bool packlet_not_empty = false;
 
-  for (uint32_t j = 0; j < simd::len; j++) {
+  for (uint8_t j = 0; j < simd::len; j++) {
     child_range_packlet[j].max = range_packlet[j].max;
     child_in_range[j] = mask_packlet[j] && (child_range_packlet[j].min < child_range_packlet[j].max);
     packlet_not_empty = packlet_not_empty || mask_packlet[j].isNotEmpty();

@@ -2,7 +2,8 @@
 #include "glfw.h"
 
 #include <raw_volume/raw_volume.h>
-#include <renderers/raw_volume.h>
+
+#include <integrators/raw_slab.h>
 
 #include <utils/linear_gradient.h>
 #include <utils/preintegrated_transfer_function.h>
@@ -177,7 +178,7 @@ int main(int argc, char *argv[]) {
     for (uint32_t y = 0; y < window.height(); y++) {
       for (uint32_t x = 0; x < window.width(); x++) {
         glm::vec3 dir = ray_transform * ray_generator(x, y);
-        glm::vec4 output = render(volume, { ray_origin, dir, 1.f / dir }, step, transfer_function_scalar);
+        glm::vec4 output = integrate_raw_slab(volume, { ray_origin, dir, 1.f / dir }, step, transfer_function_scalar);
 
         raster[y * window.width() * 3 + x * 3 + 0] = output.r * 255;
         raster[y * window.width() * 3 + x * 3 + 1] = output.g * 255;

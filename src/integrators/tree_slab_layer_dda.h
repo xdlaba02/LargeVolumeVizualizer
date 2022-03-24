@@ -7,18 +7,17 @@
 #include <ray/intersection.h>
 
 #include <utils/utils.h>
+#include <utils/blend.h>
 
 #include <glm/glm.hpp>
 
 #include <cstdint>
 
 template <typename T, typename TransferFunctionType>
-glm::vec4 render_layer_dda(const TreeVolume<T> &volume, const Ray &ray, uint8_t layer, float step, const TransferFunctionType &transfer_function) {
+glm::vec4 integrate_tree_slab_layer_dda(const TreeVolume<T> &volume, const Ray &ray, uint8_t layer, float step, float terminate_thresh, const TransferFunctionType &transfer_function) {
   glm::vec4 dst(0.f, 0.f, 0.f, 1.f);
 
-  RayRange range {};
-
-  intersect_aabb_ray(ray.origin, ray.direction_inverse, {0.f, 0.f, 0.f}, { volume.info.width_frac, volume.info.height_frac, volume.info.depth_frac}, range.min, range.max);
+  RayRange range = intersect_aabb_ray(ray, {0.f, 0.f, 0.f}, { volume.info.width_frac, volume.info.height_frac, volume.info.depth_frac});
 
   if (range.min < range.max) {
     float stepsize = step * exp2i(layer);
@@ -34,7 +33,7 @@ glm::vec4 render_layer_dda(const TreeVolume<T> &volume, const Ray &ray, uint8_t 
     ray_raster_traversal(scaled_ray, range, [&](const RayRange &range, const glm::vec<3, uint32_t> &block) {
 
       // Early ray termination
-      if (dst.a < 0.01f) {
+      if (dst.a < terminate_thresh) {
         return false;
       }
 

@@ -8,6 +8,7 @@
 
 #include <utils/utils.h>
 #include <utils/simd.h>
+#include <utils/blend_simd.h>
 
 #include <glm/glm.hpp>
 
@@ -15,8 +16,8 @@
 
 #include <array>
 
-template <typename T, typename TransferFunctionType>
-Vec4Packlet render_tree(const TreeVolume<T> &volume, const RayPacklet &ray, float step, MaskPacklet mask, const TransferFunctionType &transfer_function) {
+template <typename T, typename TransferFunctionType, typename IntegratePredicate>
+Vec4Packlet integrate_tree_slab_packlet(const TreeVolume<T> &volume, const RayPacklet &ray, float step, float terminate_thresh, MaskPacklet mask, const TransferFunctionType &transfer_function, const IntegratePredicate &integrate_predicate) {
   Vec4Packlet dst;
 
   RayRangePacklet range;
@@ -27,7 +28,7 @@ Vec4Packlet render_tree(const TreeVolume<T> &volume, const RayPacklet &ray, floa
   for (uint32_t j = 0; j < simd::len; j++) {
 
     if (mask[j].isNotEmpty()) {
-      intersect_aabb_ray(ray[j].origin, ray[j].direction_inverse, {0.f, 0.f, 0.f}, { volume.info.width_frac, volume.info.height_frac, volume.info.depth_frac}, range[j].min, range[j].max);
+      range[j] = intersect_aabb_ray(ray[j], {0.f, 0.f, 0.f}, { volume.info.width_frac, volume.info.height_frac, volume.info.depth_frac});
 
       mask[j] = mask[j] && range[j].min < range[j].max;
       dst[j] = {0.f, 0.f, 0.f, 1.f};
@@ -40,15 +41,18 @@ Vec4Packlet render_tree(const TreeVolume<T> &volume, const RayPacklet &ray, floa
   }
 
   if (packlet_not_empty) {
-    auto ray_kernel = [&](const RayRangePacklet &range, const Vec3Packlet &cell, uint32_t layer, MaskPacklet &mask) {
+    ray_octree_traversal(ray, range, { }, 0, mask, [&](const RayRangePacklet &range, const Vec3Packlet &cell, uint8_t layer, MaskPacklet &mask) {
       uint8_t layer_index = std::size(volume.info.layers) - 1 - layer;
+
+      Vec3Packlet block;
+      float stepsize = step * exp2i(layer_index);
 
       for (uint32_t j = 0; j < simd::len; j++) {
         if (mask[j].isEmpty()) {
           continue;
         }
 
-        mask[j] = mask[j] && dst[j].a > 0.01f;
+        mask[j] = mask[j] && dst[j].a > terminate_thresh;
 
         if (mask[j].isEmpty()) {
           continue;
@@ -61,11 +65,11 @@ Vec4Packlet render_tree(const TreeVolume<T> &volume, const RayPacklet &ray, floa
           continue;
         }
 
-        simd::vec3 block = cell[j] * simd::float_v(exp2i(layer));
+        block[j] = cell[j] * simd::float_v(exp2i(layer));
 
-        simd::float_m ray_outside = mask[j] && ((block.x >= volume.info.layers[layer_index].width_in_blocks)
-                                                    || (block.y >= volume.info.layers[layer_index].height_in_blocks)
-                                                    || (block.z >= volume.info.layers[layer_index].depth_in_blocks));
+        simd::float_m ray_outside = mask[j] && ((block[j].x >= volume.info.layers[layer_index].width_in_blocks)
+                                            || (block[j].y >= volume.info.layers[layer_index].height_in_blocks)
+                                            || (block[j].z >= volume.info.layers[layer_index].depth_in_blocks));
 
         if (ray_outside.isNotEmpty()) {
           slab_range[j].min(ray_outside) = range[j].max;
@@ -78,17 +82,14 @@ Vec4Packlet render_tree(const TreeVolume<T> &volume, const RayPacklet &ray, floa
           }
         }
 
-        float stepsize = step * exp2i(layer_index);
-
-        std::array<uint64_t, simd::len> node_handle;
         simd::float_v node_min;
         simd::float_v node_max;
 
         for (uint32_t k = 0; k < simd::len; k++) {
           if (mask[j][k]) {
-            node_handle[k] = volume.info.node_handle(block[0][k], block[1][k], block[2][k], layer_index);
-            node_min[k] = volume.nodes[node_handle[k]].min;
-            node_max[k] = volume.nodes[node_handle[k]].max;
+            uint64_t node_handle = volume.info.node_handle(block[j].x[k], block[j].y[k], block[j].z[k], layer_index);
+            node_min[k] = volume.nodes[node_handle].min;
+            node_max[k] = volume.nodes[node_handle].max;
           }
         }
 
@@ -122,19 +123,14 @@ Vec4Packlet render_tree(const TreeVolume<T> &volume, const RayPacklet &ray, floa
           slab_range[j].max(node_uniform) = range[j].max + stepsize;
 
           mask[j] = mask[j] && !node_uniform;
-
-          if (mask[j].isEmpty()) {
-            continue;
-          }
         }
+      }
 
-        // Recurse condition
-        if (layer_index > 0) {
-          continue;
-        }
+      MaskPacklet integrate_mask = integrate_predicate(cell, layer, mask);
 
+      for (uint32_t j = 0; j < simd::len; j++) {
         // Numeric integration
-        for (mask[j] = mask[j] && (slab_range[j].max < range[j].max); mask[j].isNotEmpty(); mask[j] = mask[j] && (slab_range[j].max < range[j].max)) {
+        for (integrate_mask[j] &= mask[j] & (slab_range[j].max < range[j].max); integrate_mask[j].isNotEmpty(); integrate_mask[j] &= slab_range[j].max < range[j].max) {
           simd::vec3 pos = ray[j].origin + ray[j].direction * slab_range[j].max;
 
           simd::vec3 in_block = (pos - cell[j]) * simd::float_v(exp2i(layer)) * simd::float_v(TreeVolume<T>::SUBVOLUME_SIDE);
@@ -142,21 +138,20 @@ Vec4Packlet render_tree(const TreeVolume<T> &volume, const RayPacklet &ray, floa
           simd::float_v slab_end_value;
 
           for (uint32_t k = 0; k < simd::len; k++) {
-            if (mask[j][k]) {
-              slab_end_value[k] = linterp(samplet(volume, volume.nodes[node_handle[k]].block_handle, in_block.x[k], in_block.y[k], in_block.z[k]));
+            if (integrate_mask[j][k]) {
+              uint64_t node_handle = volume.info.node_handle(block[j].x[k], block[j].y[k], block[j].z[k], layer_index);
+              slab_end_value[k] = linterp(samplet(volume, volume.nodes[node_handle].block_handle, in_block.x[k], in_block.y[k], in_block.z[k]));
             }
           }
 
-          blend(transfer_function(slab_start_value[j], slab_end_value, mask[j]), dst[j], slab_range[j].max - slab_range[j].min, mask[j]);
+          blend(transfer_function(slab_start_value[j], slab_end_value, integrate_mask[j]), dst[j], slab_range[j].max - slab_range[j].min, integrate_mask[j]);
 
-          slab_start_value[j](mask[j]) = slab_end_value;
-          slab_range[j].min(mask[j]) = slab_range[j].max;
-          slab_range[j].max(mask[j]) = slab_range[j].max + stepsize;
+          slab_start_value[j](integrate_mask[j]) = slab_end_value;
+          slab_range[j].min(integrate_mask[j]) = slab_range[j].max;
+          slab_range[j].max(integrate_mask[j]) = slab_range[j].max + stepsize;
         }
       }
-    };
-
-    ray_octree_traversal(ray, range, { }, 0, mask, ray_kernel);
+    });
   }
 
   return dst;

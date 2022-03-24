@@ -1,15 +1,18 @@
 
 #include "vizualize_args.h"
 #include "glfw.h"
+#include "render_scalar.h"
+#include "render_simd.h"
+#include "render_packlet.h"
 
 #include <tree_volume/tree_volume.h>
 
-#include <renderers/tree.h>
-#include <renderers/tree_simd.h>
-#include <renderers/tree_packlet.h>
-#include <renderers/tree_layer.h>
-#include <renderers/tree_layer_simd.h>
-#include <renderers/tree_layer_dda.h>
+#include <integrators/tree_slab.h>
+#include <integrators/tree_slab_simd.h>
+#include <integrators/tree_slab_packlet.h>
+#include <integrators/tree_slab_layer.h>
+#include <integrators/tree_slab_layer_simd.h>
+#include <integrators/tree_slab_layer_dda.h>
 
 #include <utils/linear_gradient.h>
 #include <utils/preintegrated_transfer_function.h>
@@ -136,32 +139,27 @@ int main(int argc, char *argv[]) {
   float step = 0.001f;
   float lod = 0.05f;
   float fov = 45.f;
-  float skip_thresh = 0.01f;
+  int scalar_layer = 0;
+  float terminate_thresh = 0.01f;
+
+  enum: int {
+    RENDERER_LAYER_DDA,
+    RENDERER_LAYER_SCALAR,
+    RENDERER_LAYER_VECTOR,
+    RENDERER_TREE_SCALAR,
+    RENDERER_TREE_VECTOR,
+    RENDERER_TREE_PACKLET,
+  } renderer = RENDERER_TREE_VECTOR;
 
   float t = 0.f;
   while (!window.shouldClose()) {
-
-    window.makeContextCurrent();
-
-
-    ImGui_ImplOpenGL2_NewFrame();
-    ImGui_ImplGlfw_NewFrame();
-    ImGui::NewFrame();
-
-    if (ImGui::Begin("Configuration", &imgui_show, 0)) {
-      ImGui::SliderFloat("Step", &step, 0.0001f, 0.1f, "%.4f", ImGuiSliderFlags_Logarithmic);
-      ImGui::SliderFloat("Level of Detail", &lod, 0.f, 1.f, "%.2f", ImGuiSliderFlags_Logarithmic);
-      ImGui::SliderFloat("Camera FOV", &fov, 0.f, 180.f, "%.0f");
-      ImGui::SliderFloat("Block skip threshold", &skip_thresh, 0.f, 1.f, "%.2f");
-      ImGui::End();
-    }
-
     auto time = std::chrono::steady_clock::now();
     float delta = std::chrono::duration_cast<std::chrono::milliseconds>(time - prev_time).count() / 1000.f;
-    std::cerr << delta << "\n";
     prev_time = time;
 
     t += delta;
+
+    // INPUT HANDLING PART
 
     {
       glm::vec2 pos;
@@ -235,80 +233,117 @@ int main(int argc, char *argv[]) {
 
     glm::mat4 view = glm::lookAt(camera_pos, camera_pos + camera_front, camera_up);
 
-    glm::mat4 ray_transform = glm::inverse(view * model);
+    // RENDERING PART
 
-    glm::vec3 ray_origin = ray_transform * glm::vec4(0.f, 0.f, 0.f, 1.f);
+    window.makeContextCurrent();
 
-    RayGenerator ray_generator(window.width(), window.height(), fov);
+    ImGui_ImplOpenGL2_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
 
-    #pragma omp parallel for schedule(dynamic)
-    for (uint32_t y = 0; y < window.height(); y += simd::len) {
-      for (uint32_t x = 0; x < window.width(); x += simd::len) {
+    if (ImGui::Begin("Configuration", &imgui_show, 0)) {
+      ImGui::Text("%3.1f FPS", 1.f / delta);
+      ImGui::SliderFloat("Step", &step, 0.0001f, 0.1f, "%.4f", ImGuiSliderFlags_Logarithmic);
+      ImGui::SliderFloat("Camera FOV", &fov, 0.f, 180.f, "%.0f");
+      ImGui::SliderFloat("Ray terminate threshold", &terminate_thresh, 0.f, 1.f, "%.2f");
+      ImGui::RadioButton("Scalar Layer", reinterpret_cast<int *>(&renderer), RENDERER_LAYER_SCALAR);
+      ImGui::RadioButton("Vector Layer", reinterpret_cast<int *>(&renderer), RENDERER_LAYER_VECTOR);
+      ImGui::RadioButton("Scalar Layer DDA", reinterpret_cast<int *>(&renderer), RENDERER_LAYER_DDA);
+      ImGui::RadioButton("Scalar Tree", reinterpret_cast<int *>(&renderer), RENDERER_TREE_SCALAR);
+      ImGui::RadioButton("Vector Tree", reinterpret_cast<int *>(&renderer), RENDERER_TREE_VECTOR);
+      ImGui::RadioButton("Packlet Tree", reinterpret_cast<int *>(&renderer), RENDERER_TREE_PACKLET);
 
-        RayPacklet ray_packlet {};
-        MaskPacklet mask_packlet {};
-        Vec4Packlet output_packlet {};
-
-        for (uint32_t yy = 0; yy < simd::len && y + yy < window.height(); yy++) {
-
-          simd::vec3 ray_direction;
-          for (uint32_t xx = 0; xx < simd::len && x + xx < window.width(); xx++) {
-            glm::vec3 dir = ray_transform * ray_generator(x + xx, y + yy);
-
-            /*
-            glm::vec4 output = render_layer_dda(volume, { ray_origin, dir, 1.f / dir }, 0, step, transfer_function_scalar);
-            glm::vec4 output = render_layer(volume, { ray_origin, dir, 1.f / dir }, 0, step, transfer_function_scalar);
-            */
-            glm::vec4 output = render_tree(volume, { ray_origin, dir, 1.f / dir }, step, skip_thresh, transfer_function_scalar, [&](const glm::vec3 &cell, uint8_t layer) {
-              float child_size = exp2i(-layer - 1);
-
-              float block_size = glm::length(volume_size * child_size);
-              float block_distance = glm::length(volume_size * (ray_origin - cell + child_size));
-
-              float perceived_size = block_size / block_distance;
-
-              return layer < std::size(volume.info.layers) - 1 && perceived_size > lod;
-            });
-
-            output_packlet[yy].x[xx] = output.x;
-            output_packlet[yy].y[xx] = output.y;
-            output_packlet[yy].z[xx] = output.z;
-
-            ray_direction.x[xx] = dir.x;
-            ray_direction.y[xx] = dir.y;
-            ray_direction.z[xx] = dir.z;
-
-            mask_packlet[yy][xx] = true;
-          }
-
-          ray_packlet[yy] = { ray_origin, ray_direction, simd::float_v(1.f) / ray_direction };
-
-          //output_packlet[yy] = render_tree(volume, ray_packlet[yy], step, mask_packlet[yy], transfer_function);
-          //output_packlet[yy] = render_layer(volume, ray_packlet[yy], mask_packlet[yy], 0, step, transfer_function);
-        }
-
-        //output_packlet = render_tree(volume, ray_packlet, step, mask_packlet, transfer_function);
-
-        for (uint32_t yy = 0; yy < simd::len; yy++) {
-          output_packlet[yy].r *= 255.f;
-          output_packlet[yy].g *= 255.f;
-          output_packlet[yy].b *= 255.f;
-
-          for (uint32_t xx = 0; xx < simd::len; xx++) {
-            if (mask_packlet[yy][xx]) {
-              raster[(y + yy) * window.width() * 3 + (x + xx) * 3 + 0] = output_packlet[yy].r[xx];
-              raster[(y + yy) * window.width() * 3 + (x + xx) * 3 + 1] = output_packlet[yy].g[xx];
-              raster[(y + yy) * window.width() * 3 + (x + xx) * 3 + 2] = output_packlet[yy].b[xx];
-            }
-          }
-        }
+      if (renderer == RENDERER_TREE_SCALAR || renderer == RENDERER_TREE_VECTOR || renderer == RENDERER_TREE_PACKLET) {
+        ImGui::SliderFloat("Level of Detail", &lod, 0.f, 1.f, "%.2f", ImGuiSliderFlags_Logarithmic);
       }
+      else if (renderer == RENDERER_LAYER_SCALAR || renderer == RENDERER_LAYER_VECTOR || renderer == RENDERER_LAYER_DDA) {
+        ImGui::SliderInt("Layer", &scalar_layer, 0, std::size(volume.info.layers) - 1);
+      }
+      ImGui::End();
     }
 
     ImGui::Render();
 
-    glDrawPixels(window.width(), window.height(), GL_RGB, GL_UNSIGNED_BYTE, raster.data());
+    switch (renderer) {
+      case RENDERER_LAYER_DDA:
+        render_scalar(window.width(), window.height(), fov, model, view, raster.data(), [&](const Ray &ray) {
+          return integrate_tree_slab_layer_dda(volume, ray, scalar_layer, step, terminate_thresh, transfer_function_scalar);
+        });
+      break;
 
+      case RENDERER_LAYER_SCALAR:
+        render_scalar(window.width(), window.height(), fov, model, view, raster.data(), [&](const Ray &ray) {
+          return integrate_tree_slab_layer(volume, ray, scalar_layer, step, terminate_thresh, transfer_function_scalar);
+        });
+      break;
+
+      case RENDERER_LAYER_VECTOR:
+        render_simd(window.width(), window.height(), fov, model, view, raster.data(), [&](const simd::Ray &ray, const simd::float_m &mask) {
+          return integrate_tree_slab_layer_simd(volume, ray, mask, scalar_layer, step, terminate_thresh, transfer_function);
+        });
+      break;
+
+      case RENDERER_TREE_SCALAR:
+        render_scalar(window.width(), window.height(), fov, model, view, raster.data(), [&](const Ray &ray) {
+          return integrate_tree_slab(volume, ray, step, terminate_thresh, transfer_function_scalar, [&](const glm::vec3 &cell, uint8_t layer) {
+            float child_size = exp2i(-layer - 1);
+
+            float block_size = glm::length(volume_size * child_size);
+            float block_distance = glm::length(volume_size * (ray.origin - cell + child_size));
+
+            float perceived_size = block_size / block_distance;
+
+            return layer == std::size(volume.info.layers) - 1 || perceived_size <= lod;
+          });
+        });
+      break;
+
+      case RENDERER_TREE_VECTOR:
+        render_simd(window.width(), window.height(), fov, model, view, raster.data(), [&](const simd::Ray &ray, const simd::float_m &mask) {
+          return integrate_tree_slab_simd(volume, ray, step, terminate_thresh, mask, transfer_function, [&](const simd::vec3 &cell, uint8_t layer, const simd::float_m &) {
+            float child_size = exp2i(-layer - 1);
+
+            float block_size = glm::length(child_size * 2);
+            simd::vec3 block_vec = ray.origin + simd::float_v(child_size) - cell;
+            simd::float_v block_distance = sqrt(block_vec.x * block_vec.x + block_vec.y * block_vec.y + block_vec.z * block_vec.z);
+
+            simd::float_v perceived_size = simd::float_v(block_size) / block_distance;
+
+            return simd::float_m(layer == std::size(volume.info.layers) - 1) || perceived_size <= lod;
+          });
+        });
+      break;
+
+      case RENDERER_TREE_PACKLET:
+        render_packlet(window.width(), window.height(), fov, model, view, raster.data(), [&](const RayPacklet &ray_packlet, const MaskPacklet &mask_packlet) {
+          return integrate_tree_slab_packlet(volume, ray_packlet, step, terminate_thresh, mask_packlet, transfer_function, [&](const Vec3Packlet &cell_packlet, uint8_t layer, const MaskPacklet &mask_packlet) {
+            float child_size = exp2i(-layer - 1);
+
+            float block_size = glm::length(child_size * 2);
+
+            MaskPacklet output_mask_packlet = mask_packlet;
+
+            for (uint8_t j = 0; j < simd::len; j++) {
+              if (mask_packlet[j].isNotEmpty()) {
+                simd::vec3 block_vec = ray_packlet[j].origin + simd::float_v(child_size) - cell_packlet[j];
+                simd::float_v block_distance = sqrt(block_vec.x * block_vec.x + block_vec.y * block_vec.y + block_vec.z * block_vec.z);
+
+                simd::float_v perceived_size = simd::float_v(block_size) / block_distance;
+
+                output_mask_packlet[j] = simd::float_m(layer == std::size(volume.info.layers) - 1) || perceived_size <= lod;
+              }
+            }
+
+            return output_mask_packlet;
+          });
+        });
+      break;
+
+      default:
+      break;
+    }
+
+    glDrawPixels(window.width(), window.height(), GL_RGB, GL_UNSIGNED_BYTE, raster.data());
     ImGui_ImplOpenGL2_RenderDrawData(ImGui::GetDrawData());
 
     window.swapBuffers();

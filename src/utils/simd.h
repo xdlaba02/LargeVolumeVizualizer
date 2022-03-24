@@ -22,7 +22,8 @@ inline void swap(T &a, T &b, const M &mask) {
   b(mask) = c;
 }
 
-template <typename T, uint32_t DENOM>
-inline T div(const Vc::SimdArray<T, simd::len> &nom) {
-  return (nom * FAST_DIV_MULT<T, DENOM>) >> FAST_DIV_SHIFT<T, DENOM>;
+template <uint32_t DENOM, typename T>
+inline T div(const T &nom) {
+  using VTYPE = typename T::value_type;
+  return (nom * FAST_DIV_MULT<VTYPE, DENOM>) >> FAST_DIV_SHIFT<VTYPE, DENOM>;
 }

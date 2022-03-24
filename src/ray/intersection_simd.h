@@ -10,15 +10,13 @@ inline simd::RayRange intersect_aabb_ray(const simd::Ray &ray, const glm::vec3 &
     swap(tmins[i], tmaxs[i], ray.direction_inverse[i] < 0.f);
   }
 
-  simd::RayRange range {
-    tmins[0],
-    tmaxs[0]
-  };
+  simd::RayRange range { tmins.x, tmaxs.x };
 
-  for (uint8_t i = 1; i < 3; ++i) {
-    range.min(tmins[i] > range.min) = tmins[i];
-    range.max(tmaxs[i] < range.max) = tmaxs[i];
-  }
+  range.min(tmins.y > range.min) = tmins.y;
+  range.max(tmaxs.y < range.max) = tmaxs.y;
+
+  range.min(tmins.z > range.min) = tmins.z;
+  range.max(tmaxs.z < range.max) = tmaxs.z;
 
   range.min(range.min < 0.f) = 0.f;
 
