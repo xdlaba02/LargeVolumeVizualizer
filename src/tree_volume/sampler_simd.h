@@ -82,9 +82,9 @@ inline simd::float_v sample(const TreeVolume<T> &volume, const simd::float_v &x,
 
   for (uint32_t k = 0; k < simd::len; k++) {
     if (mask[k]) {
-      width[k]  = approx_exp2(layer_index) * TreeVolume<T>::SUBVOLUME_SIDE;
-      height[k] = approx_exp2(layer_index) * TreeVolume<T>::SUBVOLUME_SIDE;
-      depth[k]  = approx_exp2(layer_index) * TreeVolume<T>::SUBVOLUME_SIDE;
+      width[k]  = exp2i(layer_index) * TreeVolume<T>::SUBVOLUME_SIDE;
+      height[k] = exp2i(layer_index) * TreeVolume<T>::SUBVOLUME_SIDE;
+      depth[k]  = exp2i(layer_index) * TreeVolume<T>::SUBVOLUME_SIDE;
     }
   }
 
@@ -96,9 +96,9 @@ inline simd::float_v sample(const TreeVolume<T> &volume, const simd::float_v &x,
   simd::uint32_v vox_y = denorm_y;
   simd::uint32_v vox_z = denorm_z;
 
-  simd::uint32_v block_x = simd::fast_div<TreeVolume<T>::SUBVOLUME_SIDE>(vox_x);
-  simd::uint32_v block_y = simd::fast_div<TreeVolume<T>::SUBVOLUME_SIDE>(vox_y);
-  simd::uint32_v block_z = simd::fast_div<TreeVolume<T>::SUBVOLUME_SIDE>(vox_z);
+  simd::uint32_v block_x = div<TreeVolume<T>::SUBVOLUME_SIDE>(vox_x);
+  simd::uint32_v block_y = div<TreeVolume<T>::SUBVOLUME_SIDE>(vox_y);
+  simd::uint32_v block_z = div<TreeVolume<T>::SUBVOLUME_SIDE>(vox_z);
 
   simd::uint32_v min, max;
   std::array<uint64_t, simd::len> block_handles;

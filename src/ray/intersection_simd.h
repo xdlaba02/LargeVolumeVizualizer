@@ -7,7 +7,7 @@ inline simd::RayRange intersect_aabb_ray(const simd::Ray &ray, const glm::vec3 &
   simd::vec3 tmaxs = (simd::vec3(max) - ray.origin) * ray.direction_inverse;
 
   for (uint8_t i = 0; i < 3; ++i) {
-    simd::swap(tmins[i], tmaxs[i], ray.direction_inverse[i] < 0.f);
+    swap(tmins[i], tmaxs[i], ray.direction_inverse[i] < 0.f);
   }
 
   simd::RayRange range {

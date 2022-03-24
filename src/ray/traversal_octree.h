@@ -19,7 +19,7 @@ template <RayOctreeTraversalCallback F>
 void ray_octree_traversal(const Ray &ray, const RayRange &range, glm::vec3 cell, uint32_t layer, const F &callback) {
   if (callback(range, cell, layer)) {
     // TODO precompute?
-    float child_size = approx_exp2(-layer - 1);
+    float child_size = exp2i(-layer - 1);
 
     glm::vec3 center = cell + child_size;
 

@@ -21,7 +21,7 @@ glm::vec4 render_layer_dda(const TreeVolume<T> &volume, const Ray &ray, uint8_t 
   intersect_aabb_ray(ray.origin, ray.direction_inverse, {0.f, 0.f, 0.f}, { volume.info.width_frac, volume.info.height_frac, volume.info.depth_frac}, range.min, range.max);
 
   if (range.min < range.max) {
-    float stepsize = step * approx_exp2(layer);
+    float stepsize = step * exp2i(layer);
 
     // First slab in infinitely small because we want to initialize start value with first encountered value without producing output
     RayRange slab_range { range.min, range.min };
@@ -29,7 +29,7 @@ glm::vec4 render_layer_dda(const TreeVolume<T> &volume, const Ray &ray, uint8_t 
 
     uint8_t layer_index = std::size(volume.info.layers) - 1 - layer;
 
-    Ray scaled_ray { ray.origin * approx_exp2(layer_index), ray.direction * approx_exp2(layer_index), 1.f / (ray.direction * approx_exp2(layer_index)) };
+    Ray scaled_ray { ray.origin * exp2i(layer_index), ray.direction * exp2i(layer_index), 1.f / (ray.direction * exp2i(layer_index)) };
 
     ray_raster_traversal(scaled_ray, range, [&](const RayRange &range, const glm::vec<3, uint32_t> &block) {
 

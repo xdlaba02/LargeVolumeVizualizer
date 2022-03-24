@@ -93,9 +93,9 @@ template <typename T>
 inline float sample(const TreeVolume<T> &volume, float x, float y, float z, uint8_t layer) {
   uint8_t layer_index = std::size(volume.info.layers) - 1 - layer;
 
-  float denorm_x = x * approx_exp2(layer_index) * float(TreeVolume<T>::SUBVOLUME_SIDE) - 0.5f;
-  float denorm_y = y * approx_exp2(layer_index) * float(TreeVolume<T>::SUBVOLUME_SIDE) - 0.5f;
-  float denorm_z = z * approx_exp2(layer_index) * float(TreeVolume<T>::SUBVOLUME_SIDE) - 0.5f;
+  float denorm_x = x * exp2i(layer_index) * float(TreeVolume<T>::SUBVOLUME_SIDE) - 0.5f;
+  float denorm_y = y * exp2i(layer_index) * float(TreeVolume<T>::SUBVOLUME_SIDE) - 0.5f;
+  float denorm_z = z * exp2i(layer_index) * float(TreeVolume<T>::SUBVOLUME_SIDE) - 0.5f;
 
   uint32_t vox_x = denorm_x;
   uint32_t vox_y = denorm_y;

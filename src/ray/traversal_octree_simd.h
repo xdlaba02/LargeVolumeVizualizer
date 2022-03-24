@@ -24,7 +24,7 @@ void ray_octree_traversal(const simd::Ray &ray, const simd::RayRange &range, sim
   }
 
   // TODO precompute?
-  float child_size = approx_exp2(-layer - 1);
+  float child_size = exp2i(-layer - 1);
 
   simd::vec3 center;
   simd::vec3 tcenter;
@@ -54,7 +54,7 @@ void ray_octree_traversal(const simd::Ray &ray, const simd::RayRange &range, sim
   }
 
   for (uint8_t i = 0; i < 3; i++) {
-    simd::swap(cell[i], center[i], ray.direction[i] < 0.f);
+    swap(cell[i], center[i], ray.direction[i] < 0.f);
   }
 
   simd::RayRange child_range = range;

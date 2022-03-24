@@ -41,7 +41,7 @@ glm::vec4 render_tree(const TreeVolume<T> &volume, const Ray &ray, float step, f
 
       uint8_t layer_index = std::size(volume.info.layers) - 1 - layer;
 
-      glm::vec3 block = cell * approx_exp2(layer);
+      glm::vec3 block = cell * exp2i(layer);
 
       if (block.x >= volume.info.layers[layer_index].width_in_blocks
       || (block.y >= volume.info.layers[layer_index].height_in_blocks)
@@ -52,7 +52,7 @@ glm::vec4 render_tree(const TreeVolume<T> &volume, const Ray &ray, float step, f
       }
 
       // TODO precompute
-      float stepsize = step * approx_exp2(layer_index);
+      float stepsize = step * exp2i(layer_index);
 
       const auto &node = volume.nodes[volume.info.node_handle(block[0], block[1], block[2], layer_index)];
 
@@ -88,7 +88,7 @@ glm::vec4 render_tree(const TreeVolume<T> &volume, const Ray &ray, float step, f
       while (slab_range.max < range.max) {
         glm::vec3 pos = ray.origin + ray.direction * slab_range.max;
 
-        glm::vec3 in_block = (pos - cell) * approx_exp2(layer) * float(TreeVolume<T>::SUBVOLUME_SIDE);
+        glm::vec3 in_block = (pos - cell) * exp2i(layer) * float(TreeVolume<T>::SUBVOLUME_SIDE);
 
         Samplet sampl = samplet(volume, node.block_handle, in_block.x, in_block.y, in_block.z);
 

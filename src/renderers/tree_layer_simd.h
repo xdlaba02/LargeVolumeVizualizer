@@ -21,7 +21,7 @@ simd::vec4 render_layer(const TreeVolume<T> &volume, const simd::Ray &ray, simd:
   mask = mask && range.min < range.max;
 
   if (!mask.isEmpty()) {
-    simd::float_v stepsize = step * approx_exp2(layer);
+    simd::float_v stepsize = step * exp2i(layer);
 
     simd::RayRange slab_range { range.min, range.min };
     simd::float_v slab_start_value {};

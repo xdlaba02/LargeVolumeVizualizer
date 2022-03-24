@@ -260,7 +260,7 @@ int main(int argc, char *argv[]) {
             glm::vec4 output = render_layer(volume, { ray_origin, dir, 1.f / dir }, 0, step, transfer_function_scalar);
             */
             glm::vec4 output = render_tree(volume, { ray_origin, dir, 1.f / dir }, step, skip_thresh, transfer_function_scalar, [&](const glm::vec3 &cell, uint8_t layer) {
-              float child_size = approx_exp2(-layer - 1);
+              float child_size = exp2i(-layer - 1);
 
               float block_size = glm::length(volume_size * child_size);
               float block_distance = glm::length(volume_size * (ray_origin - cell + child_size));

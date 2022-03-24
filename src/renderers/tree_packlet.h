@@ -61,7 +61,7 @@ Vec4Packlet render_tree(const TreeVolume<T> &volume, const RayPacklet &ray, floa
           continue;
         }
 
-        simd::vec3 block = cell[j] * simd::float_v(approx_exp2(layer));
+        simd::vec3 block = cell[j] * simd::float_v(exp2i(layer));
 
         simd::float_m ray_outside = mask[j] && ((block.x >= volume.info.layers[layer_index].width_in_blocks)
                                                     || (block.y >= volume.info.layers[layer_index].height_in_blocks)
@@ -78,7 +78,7 @@ Vec4Packlet render_tree(const TreeVolume<T> &volume, const RayPacklet &ray, floa
           }
         }
 
-        float stepsize = step * approx_exp2(layer_index);
+        float stepsize = step * exp2i(layer_index);
 
         std::array<uint64_t, simd::len> node_handle;
         simd::float_v node_min;
@@ -137,7 +137,7 @@ Vec4Packlet render_tree(const TreeVolume<T> &volume, const RayPacklet &ray, floa
         for (mask[j] = mask[j] && (slab_range[j].max < range[j].max); mask[j].isNotEmpty(); mask[j] = mask[j] && (slab_range[j].max < range[j].max)) {
           simd::vec3 pos = ray[j].origin + ray[j].direction * slab_range[j].max;
 
-          simd::vec3 in_block = (pos - cell[j]) * simd::float_v(approx_exp2(layer)) * simd::float_v(TreeVolume<T>::SUBVOLUME_SIDE);
+          simd::vec3 in_block = (pos - cell[j]) * simd::float_v(exp2i(layer)) * simd::float_v(TreeVolume<T>::SUBVOLUME_SIDE);
 
           simd::float_v slab_end_value;
 

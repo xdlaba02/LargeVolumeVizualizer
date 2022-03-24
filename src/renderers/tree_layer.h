@@ -19,7 +19,7 @@ glm::vec4 render_layer(const TreeVolume<T> &volume, const Ray &ray, uint8_t laye
   intersect_aabb_ray(ray.origin, ray.direction_inverse, {0, 0, 0}, { volume.info.width_frac, volume.info.height_frac, volume.info.depth_frac}, range.min, range.max);
 
   if (range.min < range.max) {
-    float stepsize = step * approx_exp2(layer);
+    float stepsize = step * exp2i(layer);
 
     RayRange slab_range { range.min, range.min };
 

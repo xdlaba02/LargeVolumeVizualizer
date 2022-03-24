@@ -40,7 +40,7 @@ void ray_octree_traversal(const RayPacklet &ray_packlet, const RayRangePacklet &
   }
 
   // TODO precompute?
-  float child_size = approx_exp2(-layer - 1);
+  float child_size = exp2i(-layer - 1);
 
   Vec3Packlet center_packlet;
   Vec3Packlet tcenter_packlet;
@@ -75,7 +75,7 @@ void ray_octree_traversal(const RayPacklet &ray_packlet, const RayRangePacklet &
     }
 
     for (uint8_t i = 0; i < 3; i++) {
-      simd::swap(cell_packlet[j][i], center_packlet[j][i], ray_packlet[j].direction[i] < 0.f);
+      swap(cell_packlet[j][i], center_packlet[j][i], ray_packlet[j].direction[i] < 0.f);
     }
   }
 
@@ -95,7 +95,7 @@ void ray_octree_traversal(const RayPacklet &ray_packlet, const RayRangePacklet &
         }
       }
 
-      child_range_packlet[j].max = simd::min(child_range_packlet[j].max, range_packlet[j].max);
+      child_range_packlet[j].max = std::min(child_range_packlet[j].max, range_packlet[j].max);
 
       child_in_range[j] = mask_packlet[j] && (child_range_packlet[j].min < child_range_packlet[j].max);
       packlet_not_empty = packlet_not_empty || mask_packlet[j].isNotEmpty();
