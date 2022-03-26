@@ -1,11 +1,12 @@
 
 #include "glfw.h"
+#include "tf1d.h"
 
 #include <raw_volume/raw_volume.h>
 
 #include <integrators/raw_slab.h>
 
-#include <utils/linear_gradient.h>
+#include <utils/piecewise_linear.h>
 #include <utils/preintegrate_function.h>
 #include <utils/ray_generator.h>
 
@@ -28,9 +29,9 @@ int main(int argc, char *argv[]) {
   uint32_t depth;
 
   {
-    std::stringstream wstream(argv[2]);
-    std::stringstream hstream(argv[3]);
-    std::stringstream dstream(argv[4]);
+    std::stringstream wstream(argv[3]);
+    std::stringstream hstream(argv[4]);
+    std::stringstream dstream(argv[5]);
     wstream >> width;
     hstream >> height;
     dstream >> depth;
@@ -38,37 +39,14 @@ int main(int argc, char *argv[]) {
 
   RawVolume<uint8_t> volume(argv[1], width, height, depth);
 
-  std::map<float, glm::vec3> color_map {
-    #if 1
-    {80.f,  {0.75f, 0.5f, 0.25f}},
-    {82.f,  {1.00f, 1.0f, 0.85f}}
-    #else
-    {0.f,  {1.00f, 0.0f, 0.0f}},
-    {89.f,  {0.00f, 1.0f, 0.0f}},
-    {178.f,  {0.00f, 0.0f, 1.0f}},
-    #endif
-  };
-
-  std::map<float, float> alpha_map {
-    #if 1
-    {40.f,  000.f},
-    {60.f,  001.f},
-    {63.f,  005.f},
-    {80.f,  000.f},
-    {82.f,  100.f},
-    #else
-    {0.f,   0.f},
-    {89.f,  5.f},
-    {178.f, 0.f},
-    #endif
-  };
+  TF1D tf = TF1D::load_from_file(argv[2]);
 
   static constinit uint32_t pre_size = 256;
 
-  Texture2D<float> transfer_r = preintegrate_function(pre_size, [&](float v){ return linear_gradient(color_map, v).r; });
-  Texture2D<float> transfer_g = preintegrate_function(pre_size, [&](float v){ return linear_gradient(color_map, v).g; });
-  Texture2D<float> transfer_b = preintegrate_function(pre_size, [&](float v){ return linear_gradient(color_map, v).b; });
-  Texture2D<float> transfer_a = preintegrate_function(pre_size, [&](float v){ return linear_gradient(alpha_map, v); });
+  Texture2D<float> transfer_r = preintegrate_function(pre_size, [&](float v){ return piecewise_linear(tf.rgb, v).r; });
+  Texture2D<float> transfer_g = preintegrate_function(pre_size, [&](float v){ return piecewise_linear(tf.rgb, v).g; });
+  Texture2D<float> transfer_b = preintegrate_function(pre_size, [&](float v){ return piecewise_linear(tf.rgb, v).b; });
+  Texture2D<float> transfer_a = preintegrate_function(pre_size, [&](float v){ return piecewise_linear(tf.a,   v); });
 
   auto transfer_function_scalar = [&](float begin, float end) -> glm::vec4 {
     begin = (begin + 0.5f) / 256.f;
@@ -86,20 +64,18 @@ int main(int argc, char *argv[]) {
 
   std::vector<uint8_t> raster(window.width() * window.height() * 3);
 
-  auto prev_time = std::chrono::steady_clock::now();
+  glm::vec2 prev_cursor_pos;
 
-  glm::vec2 prev_pos;
-  window.getCursor(prev_pos.x, prev_pos.y);
-
-  float yaw = -90;
-  float pitch = 0;
+  float camera_yaw = -90;
+  float camera_pitch = 0;
 
   glm::vec3 camera_pos   = glm::vec3(0.0f, 0.0f, 2.0f);
-  constexpr glm::vec3 camera_up = glm::vec3(0.0f, 1.0f, 0.0f);
+  glm::vec3 camera_up = glm::vec3(0.0f, 1.0f, 0.0f);
 
-  glm::vec3 volume_pos   = glm::vec3(0.0f, 0.0f, 0.0f);
+  glm::vec3 volume_pos = glm::vec3(0.0f, 0.0f, 0.0f);
 
   float t = 0.f;
+  auto prev_time = std::chrono::steady_clock::now();
   while (!window.shouldClose()) {
 
     auto time = std::chrono::steady_clock::now();
@@ -115,20 +91,20 @@ int main(int argc, char *argv[]) {
       window.getCursor(pos.x, pos.y);
 
       constexpr float sensitivity = 0.1f;
-      glm::vec2 offset = (pos - prev_pos) * sensitivity;
+      glm::vec2 offset = (pos - prev_cursor_pos) * sensitivity;
 
-      prev_pos = pos;
+      prev_cursor_pos = pos;
 
-      yaw   += offset.x;
-      pitch -= offset.y;
+      camera_yaw   += offset.x;
+      camera_pitch -= offset.y;
 
-      pitch = std::clamp(pitch, -89.f, 89.f);
+      camera_pitch = std::clamp(camera_pitch, -89.f, 89.f);
     }
 
     glm::vec3 camera_front = glm::normalize(glm::vec3{
-      std::cos(glm::radians(yaw)) * std::cos(glm::radians(pitch)),
-      std::sin(glm::radians(pitch)),
-      std::sin(glm::radians(yaw)) * std::cos(glm::radians(pitch)),
+      std::cos(glm::radians(camera_yaw)) * std::cos(glm::radians(camera_pitch)),
+      std::sin(glm::radians(camera_pitch)),
+      std::sin(glm::radians(camera_yaw)) * std::cos(glm::radians(camera_pitch)),
     });
 
     {
@@ -166,7 +142,7 @@ int main(int argc, char *argv[]) {
     // TODO hide transforms into object and camera class
     // by default, the volume is rendered in the interval [0, volume.info.frac]
     glm::mat4 model = glm::translate(glm::mat4(1.f), volume_pos)
-                    * glm::rotate(glm::mat4(1.f), 0.f, glm::vec3(0.f, 1.f, 0.f))
+                    * glm::rotate(glm::mat4(1.f), t, glm::vec3(0.f, 1.f, 0.f))
                     * glm::rotate(glm::mat4(1.f), glm::radians(90.f), glm::vec3(1.f, 0.f, 0.f))
                     * glm::translate(glm::mat4(1.f), glm::vec3(-0.5f));
 

@@ -1,5 +1,6 @@
 
 #include "vizualize_args.h"
+#include "tf1d.h"
 #include "glfw.h"
 
 #include <tree_volume/tree_volume.h>
@@ -15,7 +16,7 @@
 #include <integrators/tree_slab_layer_simd.h>
 #include <integrators/tree_slab_layer_dda.h>
 
-#include <utils/linear_gradient.h>
+#include <utils/piecewise_linear.h>
 #include <utils/preintegrate_function.h>
 #include <utils/ray_generator.h>
 
@@ -35,54 +36,25 @@
 int main(int argc, char *argv[]) {
   const char *processed_volume;
   const char *processed_metadata;
+  const char *transfer_function;
   uint32_t width;
   uint32_t height;
   uint32_t depth;
 
-  if (!parse_args(argc, argv, processed_volume, processed_metadata, width, height, depth)) {
+  if (!parse_args(argc, argv, processed_volume, processed_metadata, transfer_function, width, height, depth)) {
     return 1;
   }
 
   TreeVolume<uint8_t> volume(processed_volume, processed_metadata, width, height, depth);
 
-  std::map<float, glm::vec3> color_map {
-#if 0
-    {80.f,  {0.75f, 0.5f, 0.25f}},
-    {82.f,  {1.00f, 1.0f, 0.85f}}
-#else
-    {00.f,   {1.0f, 0.0f, 0.0f}},
-    {01.f,   {1.0f, 1.0f, 0.0f}},
-    {02.f,   {0.0f, 1.0f, 0.0f}},
-    {03.f,   {0.0f, 1.0f, 1.0f}},
-    {04.f,   {0.0f, 0.0f, 1.0f}},
-    {05.f,   {1.0f, 0.0f, 1.0f}},
-    {06.f,   {1.0f, 0.0f, 0.0f}},
-    {07.f,   {1.0f, 1.0f, 0.0f}},
-    {08.f,   {0.0f, 1.0f, 0.0f}},
-    {09.f,   {0.0f, 1.0f, 1.0f}},
-    {10.f,   {0.0f, 0.0f, 1.0f}},
-    {11.f,   {1.0f, 0.0f, 1.0f}},
-#endif
-  };
-
-  std::map<float, float> alpha_map {
-#if 0
-    {40.f,  000.f},
-    {60.f,  001.f},
-    {63.f,  005.f},
-    {80.f,  000.f},
-    {82.f,  100.f},
-#else
-    {0.f,   100000.f},
-#endif
-  };
+  TF1D tf1d = TF1D::load_from_file(transfer_function);
 
   static constinit uint32_t pre_size = 256;
 
-  Texture2D<float> transfer_r = preintegrate_function(pre_size, [&](float v){ return linear_gradient(color_map, v).r; });
-  Texture2D<float> transfer_g = preintegrate_function(pre_size, [&](float v){ return linear_gradient(color_map, v).g; });
-  Texture2D<float> transfer_b = preintegrate_function(pre_size, [&](float v){ return linear_gradient(color_map, v).b; });
-  Texture2D<float> transfer_a = preintegrate_function(pre_size, [&](float v){ return linear_gradient(alpha_map, v); });
+  Texture2D<float> transfer_r = preintegrate_function(pre_size, [&](float v){ return piecewise_linear(tf1d.rgb, v).r; });
+  Texture2D<float> transfer_g = preintegrate_function(pre_size, [&](float v){ return piecewise_linear(tf1d.rgb, v).g; });
+  Texture2D<float> transfer_b = preintegrate_function(pre_size, [&](float v){ return piecewise_linear(tf1d.rgb, v).b; });
+  Texture2D<float> transfer_a = preintegrate_function(pre_size, [&](float v){ return piecewise_linear(tf1d.a,   v);   });
 
   auto transfer_function_vector = [&](simd::float_v begin, simd::float_v end, const simd::float_m &mask) -> simd::vec4 {
     // convert to normalized coordinates
@@ -114,20 +86,16 @@ int main(int argc, char *argv[]) {
 
   std::vector<uint8_t> raster(window.width() * window.height() * 3);
 
-  auto prev_time = std::chrono::steady_clock::now();
+  glm::vec2 prev_cursor_pos;
 
-  glm::vec2 prev_pos;
-  window.getCursor(prev_pos.x, prev_pos.y);
+  float camera_yaw = -90;
+  float camera_pitch = 0;
 
-  float yaw = -90;
-  float pitch = 0;
-
-  glm::vec3 camera_pos          = glm::vec3(0.0f, 0.0f, 2.0f);
-  constexpr glm::vec3 camera_up = glm::vec3(0.0f, 1.0f, 0.0f);
+  glm::vec3 camera_pos = glm::vec3(0.0f, 0.0f, 2.0f);
+  glm::vec3 camera_up = glm::vec3(0.0f, 1.0f, 0.0f);
 
   glm::vec3 volume_pos = glm::vec3(0.0f, 0.0f, 0.0f);
   glm::vec3 volume_size(1.f / volume.info.width_frac, 1.f / volume.info.height_frac, 1.f / volume.info.depth_frac);
-
 
   bool imgui_show = true;
 
@@ -147,6 +115,7 @@ int main(int argc, char *argv[]) {
   } renderer = RENDERER_TREE_VECTOR;
 
   float t = 0.f;
+  auto prev_time = std::chrono::steady_clock::now();
   while (!window.shouldClose()) {
     auto time = std::chrono::steady_clock::now();
     float delta = std::chrono::duration_cast<std::chrono::milliseconds>(time - prev_time).count() / 1000.f;
@@ -161,19 +130,19 @@ int main(int argc, char *argv[]) {
 
       window.getCursor(pos.x, pos.y);
 
-      glm::vec2 offset = pos - prev_pos;
+      glm::vec2 offset = pos - prev_cursor_pos;
 
-      prev_pos = pos;
+      prev_cursor_pos = pos;
 
       if (window.getMouseButton(GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS) {
         window.setCursorMode(GLFW_CURSOR_DISABLED);
 
         constexpr float sensitivity = 0.1f;
 
-        yaw   += offset.x * sensitivity;
-        pitch -= offset.y * sensitivity;
+        camera_yaw   += offset.x * sensitivity;
+        camera_pitch -= offset.y * sensitivity;
 
-        pitch = std::clamp(pitch, -89.f, 89.f);
+        camera_pitch = std::clamp(camera_pitch, -89.f, 89.f);
       }
       else {
         window.setCursorMode(GLFW_CURSOR_NORMAL);
@@ -181,9 +150,9 @@ int main(int argc, char *argv[]) {
     }
 
     glm::vec3 camera_front = glm::normalize(glm::vec3{
-      std::cos(glm::radians(yaw)) * std::cos(glm::radians(pitch)),
-      std::sin(glm::radians(pitch)),
-      std::sin(glm::radians(yaw)) * std::cos(glm::radians(pitch)),
+      std::cos(glm::radians(camera_yaw)) * std::cos(glm::radians(camera_pitch)),
+      std::sin(glm::radians(camera_pitch)),
+      std::sin(glm::radians(camera_yaw)) * std::cos(glm::radians(camera_pitch)),
     });
 
     {
@@ -220,11 +189,13 @@ int main(int argc, char *argv[]) {
 
     // TODO hide transforms into object and camera class
     // by default, the volume is rendered in the interval [0, volume.info.frac]
-    glm::mat4 model = glm::translate(glm::mat4(1.f), volume_pos)
-                    * glm::rotate(glm::mat4(1.f), t, glm::vec3(0.f, 1.f, 0.f))
-                    //* glm::rotate(glm::mat4(1.f), glm::radians(90.f), glm::vec3(1.f, 0.f, 0.f))
-                    //* glm::translate(glm::mat4(1.f), glm::vec3(-0.5f))
-                    * glm::scale(glm::mat4(1.f), volume_size);
+    glm::mat4 model {
+      glm::translate(glm::mat4(1.f), volume_pos) *
+      glm::rotate(glm::mat4(1.f), t, glm::vec3(0.f, 1.f, 0.f)) *
+      glm::rotate(glm::mat4(1.f), glm::radians(90.f), glm::vec3(1.f, 0.f, 0.f)) *
+      glm::translate(glm::mat4(1.f), glm::vec3(-0.5f)) *
+      glm::scale(glm::mat4(1.f), volume_size)
+    };
 
     glm::mat4 view = glm::lookAt(camera_pos, camera_pos + camera_front, camera_up);
 
@@ -246,6 +217,7 @@ int main(int argc, char *argv[]) {
       if (ImGui::TreeNode("Renderer")) {
         ImGui::SliderFloat("Step", &step, 0.0001f, 0.1f, "%.4f", ImGuiSliderFlags_Logarithmic);
         ImGui::SliderFloat("Ray terminate threshold", &terminate_thresh, 0.f, 1.f, "%.2f");
+
         ImGui::RadioButton("Scalar Layer", reinterpret_cast<int *>(&renderer), RENDERER_LAYER_SCALAR);
         ImGui::RadioButton("Vector Layer", reinterpret_cast<int *>(&renderer), RENDERER_LAYER_VECTOR);
         ImGui::RadioButton("Scalar Layer DDA", reinterpret_cast<int *>(&renderer), RENDERER_LAYER_DDA);
