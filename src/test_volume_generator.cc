@@ -68,10 +68,8 @@ int main(int argc, char *argv[]) {
 
           TreeVolume<uint8_t>::Block block {};
 
-          uint32_t block_val = layer * 2 + ((block_x & 1) ^ (block_y & 1) ^ (block_z & 1));
-
           for (uint32_t i = 0; i < TreeVolume<uint8_t>::BLOCK_SIZE; i++) {
-            block[i] = block_val;
+            block[i] = layer;
           }
 
           #pragma omp critical

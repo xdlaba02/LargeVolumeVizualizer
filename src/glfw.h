@@ -39,10 +39,10 @@ public:
     }
 
     ~Window() {
-      glfwDestroyWindow(m_window);
-
       ImGui_ImplOpenGL2_Shutdown();
       ImGui_ImplGlfw_Shutdown();
+
+      glfwDestroyWindow(m_window);
 
       ImGui::DestroyContext();
     }

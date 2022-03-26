@@ -1,11 +1,12 @@
 
 #include "vizualize_args.h"
 #include "glfw.h"
-#include "render_scalar.h"
-#include "render_simd.h"
-#include "render_packlet.h"
 
 #include <tree_volume/tree_volume.h>
+
+#include <renderers/scalar.h>
+#include <renderers/simd.h>
+#include <renderers/packlet.h>
 
 #include <integrators/tree_slab.h>
 #include <integrators/tree_slab_simd.h>
@@ -15,8 +16,12 @@
 #include <integrators/tree_slab_layer_dda.h>
 
 #include <utils/linear_gradient.h>
-#include <utils/preintegrated_transfer_function.h>
+#include <utils/preintegrate_function.h>
 #include <utils/ray_generator.h>
+
+#include <utils/texture2D/texture2D.h>
+#include <utils/texture2D/sampler.h>
+#include <utils/texture2D/sampler_simd.h>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -26,13 +31,6 @@
 #include <iostream>
 #include <vector>
 #include <chrono>
-
-// Phong shading
-// TODO Determinace uzlu
-// TODO Rozhrani
-// TODO Precomputes?
-// TODO Camera class
-// TODO Nicer Sampler1D and Sampler2D
 
 int main(int argc, char *argv[]) {
   const char *processed_volume;
@@ -48,71 +46,68 @@ int main(int argc, char *argv[]) {
   TreeVolume<uint8_t> volume(processed_volume, processed_metadata, width, height, depth);
 
   std::map<float, glm::vec3> color_map {
-#if 1
+#if 0
     {80.f,  {0.75f, 0.5f, 0.25f}},
     {82.f,  {1.00f, 1.0f, 0.85f}}
 #else
-    {0.f,   {1.0f, 0.0f, 0.0f}},
-    {1.f,   {1.0f, 0.5f, 0.5f}},
-
-    {2.f,   {1.0f, 1.0f, 0.0f}},
-    {3.f,   {1.0f, 1.0f, 0.5f}},
-
-    {4.f,   {0.0f, 1.0f, 0.0f}},
-    {5.f,   {0.5f, 1.0f, 0.5f}},
-
-    {6.f,   {0.0f, 1.0f, 1.0f}},
-    {7.f,   {0.5f, 1.0f, 1.0f}},
-
-    {8.f,   {0.0f, 0.0f, 1.0f}},
-    {9.f,   {0.5f, 0.5f, 1.0f}},
-
-    {10.f,   {1.0f, 0.0f, 1.0f}},
-    {11.f,   {1.0f, 0.5f, 1.0f}},
-
-    {12.f,   {1.0f, 0.0f, 0.0f}},
-    {13.f,   {1.0f, 0.5f, 0.5f}},
-
-    {14.f,   {1.0f, 1.0f, 0.0f}},
-    {15.f,   {1.0f, 1.0f, 0.5f}},
-
-    {16.f,   {0.0f, 1.0f, 0.0f}},
-    {17.f,   {0.5f, 1.0f, 0.5f}},
-
-    {18.f,   {0.0f, 1.0f, 1.0f}},
-    {19.f,   {0.5f, 1.0f, 1.0f}},
-
-    {20.f,   {0.0f, 0.0f, 1.0f}},
-    {21.f,   {0.5f, 0.5f, 1.0f}},
-
-    {22.f,   {1.0f, 0.0f, 1.0f}},
-    {23.f,   {1.0f, 0.5f, 1.0f}},
+    {00.f,   {1.0f, 0.0f, 0.0f}},
+    {01.f,   {1.0f, 1.0f, 0.0f}},
+    {02.f,   {0.0f, 1.0f, 0.0f}},
+    {03.f,   {0.0f, 1.0f, 1.0f}},
+    {04.f,   {0.0f, 0.0f, 1.0f}},
+    {05.f,   {1.0f, 0.0f, 1.0f}},
+    {06.f,   {1.0f, 0.0f, 0.0f}},
+    {07.f,   {1.0f, 1.0f, 0.0f}},
+    {08.f,   {0.0f, 1.0f, 0.0f}},
+    {09.f,   {0.0f, 1.0f, 1.0f}},
+    {10.f,   {0.0f, 0.0f, 1.0f}},
+    {11.f,   {1.0f, 0.0f, 1.0f}},
 #endif
   };
 
   std::map<float, float> alpha_map {
-#if 1
+#if 0
     {40.f,  000.f},
     {60.f,  001.f},
     {63.f,  005.f},
     {80.f,  000.f},
     {82.f,  100.f},
 #else
-    {0.f,   10000.f},
+    {0.f,   100000.f},
 #endif
   };
 
-  PreintegratedTransferFunction<uint8_t> preintegrated_r([&](float v){ return linear_gradient(color_map, v).r; });
-  PreintegratedTransferFunction<uint8_t> preintegrated_g([&](float v){ return linear_gradient(color_map, v).g; });
-  PreintegratedTransferFunction<uint8_t> preintegrated_b([&](float v){ return linear_gradient(color_map, v).b; });
-  PreintegratedTransferFunction<uint8_t> preintegrated_a([&](float v){ return linear_gradient(alpha_map, v); });
+  static constinit uint32_t pre_size = 256;
 
-  auto transfer_function = [&](const auto &v0, const auto &v1, const auto &mask) {
-    return simd::vec4(preintegrated_r(v0, v1, mask), preintegrated_g(v0, v1, mask), preintegrated_b(v0, v1, mask), preintegrated_a(v0, v1, mask));
+  Texture2D<float> transfer_r = preintegrate_function(pre_size, [&](float v){ return linear_gradient(color_map, v).r; });
+  Texture2D<float> transfer_g = preintegrate_function(pre_size, [&](float v){ return linear_gradient(color_map, v).g; });
+  Texture2D<float> transfer_b = preintegrate_function(pre_size, [&](float v){ return linear_gradient(color_map, v).b; });
+  Texture2D<float> transfer_a = preintegrate_function(pre_size, [&](float v){ return linear_gradient(alpha_map, v); });
+
+  auto transfer_function_vector = [&](simd::float_v begin, simd::float_v end, const simd::float_m &mask) -> simd::vec4 {
+    // convert to normalized coordinates
+    begin = (begin + 0.5f) / 256.f;
+    end   = (end   + 0.5f) / 256.f;
+
+    return {
+      sample(transfer_r, begin, end, mask),
+      sample(transfer_g, begin, end, mask),
+      sample(transfer_b, begin, end, mask),
+      sample(transfer_a, begin, end, mask)
+    };
   };
 
-  auto transfer_function_scalar = [&](const auto &v0, const auto &v1) {
-    return glm::vec4(preintegrated_r(v0, v1), preintegrated_g(v0, v1), preintegrated_b(v0, v1), preintegrated_a(v0, v1));
+  auto transfer_function_scalar = [&](float begin, float end) -> glm::vec4 {
+    // convert to normalized coordinates
+    begin = (begin + 0.5f) / 256.f;
+    end   = (end   + 0.5f) / 256.f;
+
+    return {
+      sample(transfer_r, begin, end),
+      sample(transfer_g, begin, end),
+      sample(transfer_b, begin, end),
+      sample(transfer_a, begin, end)
+    };
   };
 
   GLFW::Window window(1920, 1080, "Volumetric Vizualizer");
@@ -127,12 +122,12 @@ int main(int argc, char *argv[]) {
   float yaw = -90;
   float pitch = 0;
 
-  glm::vec3 camera_pos   = glm::vec3(0.0f, 0.0f, 2.0f);
+  glm::vec3 camera_pos          = glm::vec3(0.0f, 0.0f, 2.0f);
   constexpr glm::vec3 camera_up = glm::vec3(0.0f, 1.0f, 0.0f);
 
-  glm::vec3 volume_pos   = glm::vec3(0.0f, 0.0f, 0.0f);
-
+  glm::vec3 volume_pos = glm::vec3(0.0f, 0.0f, 0.0f);
   glm::vec3 volume_size(1.f / volume.info.width_frac, 1.f / volume.info.height_frac, 1.f / volume.info.depth_frac);
+
 
   bool imgui_show = true;
 
@@ -227,8 +222,8 @@ int main(int argc, char *argv[]) {
     // by default, the volume is rendered in the interval [0, volume.info.frac]
     glm::mat4 model = glm::translate(glm::mat4(1.f), volume_pos)
                     * glm::rotate(glm::mat4(1.f), t, glm::vec3(0.f, 1.f, 0.f))
-                    * glm::rotate(glm::mat4(1.f), glm::radians(90.f), glm::vec3(1.f, 0.f, 0.f))
-                    * glm::translate(glm::mat4(1.f), glm::vec3(-0.5f))
+                    //* glm::rotate(glm::mat4(1.f), glm::radians(90.f), glm::vec3(1.f, 0.f, 0.f))
+                    //* glm::translate(glm::mat4(1.f), glm::vec3(-0.5f))
                     * glm::scale(glm::mat4(1.f), volume_size);
 
     glm::mat4 view = glm::lookAt(camera_pos, camera_pos + camera_front, camera_up);
@@ -242,22 +237,32 @@ int main(int argc, char *argv[]) {
     ImGui::NewFrame();
 
     if (ImGui::Begin("Configuration", &imgui_show, 0)) {
-      ImGui::Text("%3.1f FPS", 1.f / delta);
-      ImGui::SliderFloat("Step", &step, 0.0001f, 0.1f, "%.4f", ImGuiSliderFlags_Logarithmic);
-      ImGui::SliderFloat("Camera FOV", &fov, 0.f, 180.f, "%.0f");
-      ImGui::SliderFloat("Ray terminate threshold", &terminate_thresh, 0.f, 1.f, "%.2f");
-      ImGui::RadioButton("Scalar Layer", reinterpret_cast<int *>(&renderer), RENDERER_LAYER_SCALAR);
-      ImGui::RadioButton("Vector Layer", reinterpret_cast<int *>(&renderer), RENDERER_LAYER_VECTOR);
-      ImGui::RadioButton("Scalar Layer DDA", reinterpret_cast<int *>(&renderer), RENDERER_LAYER_DDA);
-      ImGui::RadioButton("Scalar Tree", reinterpret_cast<int *>(&renderer), RENDERER_TREE_SCALAR);
-      ImGui::RadioButton("Vector Tree", reinterpret_cast<int *>(&renderer), RENDERER_TREE_VECTOR);
-      ImGui::RadioButton("Packlet Tree", reinterpret_cast<int *>(&renderer), RENDERER_TREE_PACKLET);
-
-      if (renderer == RENDERER_TREE_SCALAR || renderer == RENDERER_TREE_VECTOR || renderer == RENDERER_TREE_PACKLET) {
-        ImGui::SliderFloat("Level of Detail", &lod, 0.f, 1.f, "%.2f", ImGuiSliderFlags_Logarithmic);
+      ImGui::SetNextItemOpen(true);
+      if (ImGui::TreeNode("Info")) {
+        ImGui::Text("%3.1f FPS", 1.f / delta);
+        ImGui::TreePop();
       }
-      else if (renderer == RENDERER_LAYER_SCALAR || renderer == RENDERER_LAYER_VECTOR || renderer == RENDERER_LAYER_DDA) {
-        ImGui::SliderInt("Layer", &scalar_layer, 0, std::size(volume.info.layers) - 1);
+
+      if (ImGui::TreeNode("Renderer")) {
+        ImGui::SliderFloat("Step", &step, 0.0001f, 0.1f, "%.4f", ImGuiSliderFlags_Logarithmic);
+        ImGui::SliderFloat("Ray terminate threshold", &terminate_thresh, 0.f, 1.f, "%.2f");
+        ImGui::RadioButton("Scalar Layer", reinterpret_cast<int *>(&renderer), RENDERER_LAYER_SCALAR);
+        ImGui::RadioButton("Vector Layer", reinterpret_cast<int *>(&renderer), RENDERER_LAYER_VECTOR);
+        ImGui::RadioButton("Scalar Layer DDA", reinterpret_cast<int *>(&renderer), RENDERER_LAYER_DDA);
+        ImGui::RadioButton("Scalar Tree", reinterpret_cast<int *>(&renderer), RENDERER_TREE_SCALAR);
+        ImGui::RadioButton("Vector Tree", reinterpret_cast<int *>(&renderer), RENDERER_TREE_VECTOR);
+        ImGui::RadioButton("Packlet Tree", reinterpret_cast<int *>(&renderer), RENDERER_TREE_PACKLET);
+
+        if (renderer == RENDERER_TREE_SCALAR || renderer == RENDERER_TREE_VECTOR || renderer == RENDERER_TREE_PACKLET) {
+          ImGui::SliderFloat("Level of Detail", &lod, 0.f, 1.f, "%.2f", ImGuiSliderFlags_Logarithmic);
+        }
+        else if (renderer == RENDERER_LAYER_SCALAR || renderer == RENDERER_LAYER_VECTOR || renderer == RENDERER_LAYER_DDA) {
+          ImGui::SliderInt("Layer", &scalar_layer, 0, std::size(volume.info.layers) - 1);
+        }
+      }
+
+      if (ImGui::TreeNode("Camera")) {
+        ImGui::SliderFloat("FOV", &fov, 0.f, 180.f, "%.0f");
       }
       ImGui::End();
     }
@@ -279,7 +284,7 @@ int main(int argc, char *argv[]) {
 
       case RENDERER_LAYER_VECTOR:
         render_simd(window.width(), window.height(), fov, model, view, raster.data(), [&](const simd::Ray &ray, const simd::float_m &mask) {
-          return integrate_tree_slab_layer_simd(volume, ray, mask, scalar_layer, step, terminate_thresh, transfer_function);
+          return integrate_tree_slab_layer_simd(volume, ray, mask, scalar_layer, step, terminate_thresh, transfer_function_vector);
         });
       break;
 
@@ -300,7 +305,7 @@ int main(int argc, char *argv[]) {
 
       case RENDERER_TREE_VECTOR:
         render_simd(window.width(), window.height(), fov, model, view, raster.data(), [&](const simd::Ray &ray, const simd::float_m &mask) {
-          return integrate_tree_slab_simd(volume, ray, step, terminate_thresh, mask, transfer_function, [&](const simd::vec3 &cell, uint8_t layer, const simd::float_m &) {
+          return integrate_tree_slab_simd(volume, ray, step, terminate_thresh, mask, transfer_function_vector, [&](const simd::vec3 &cell, uint8_t layer, const simd::float_m &) {
             float child_size = exp2i(-layer - 1);
 
             float block_size = glm::length(child_size * 2);
@@ -316,7 +321,7 @@ int main(int argc, char *argv[]) {
 
       case RENDERER_TREE_PACKLET:
         render_packlet(window.width(), window.height(), fov, model, view, raster.data(), [&](const RayPacklet &ray_packlet, const MaskPacklet &mask_packlet) {
-          return integrate_tree_slab_packlet(volume, ray_packlet, step, terminate_thresh, mask_packlet, transfer_function, [&](const Vec3Packlet &cell_packlet, uint8_t layer, const MaskPacklet &mask_packlet) {
+          return integrate_tree_slab_packlet(volume, ray_packlet, step, terminate_thresh, mask_packlet, transfer_function_vector, [&](const Vec3Packlet &cell_packlet, uint8_t layer, const MaskPacklet &mask_packlet) {
             float child_size = exp2i(-layer - 1);
 
             float block_size = glm::length(child_size * 2);

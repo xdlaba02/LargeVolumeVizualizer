@@ -6,8 +6,11 @@
 #include <integrators/raw_slab.h>
 
 #include <utils/linear_gradient.h>
-#include <utils/preintegrated_transfer_function.h>
+#include <utils/preintegrate_function.h>
 #include <utils/ray_generator.h>
+
+#include <utils/texture2D/texture2D.h>
+#include <utils/texture2D/sampler.h>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -18,13 +21,6 @@
 #include <sstream>
 #include <vector>
 #include <chrono>
-
-// Phong shading
-// TODO Determinace uzlu
-// TODO Rozhrani
-// TODO Precomputes?
-// TODO Camera class
-// TODO Nicer Sampler1D and Sampler2D
 
 int main(int argc, char *argv[]) {
   uint32_t width;
@@ -67,13 +63,23 @@ int main(int argc, char *argv[]) {
     #endif
   };
 
-  PreintegratedTransferFunction<uint8_t> preintegrated_r([&](float v){ return linear_gradient(color_map, v).r; });
-  PreintegratedTransferFunction<uint8_t> preintegrated_g([&](float v){ return linear_gradient(color_map, v).g; });
-  PreintegratedTransferFunction<uint8_t> preintegrated_b([&](float v){ return linear_gradient(color_map, v).b; });
-  PreintegratedTransferFunction<uint8_t> preintegrated_a([&](float v){ return linear_gradient(alpha_map, v); });
+  static constinit uint32_t pre_size = 256;
 
-  auto transfer_function_scalar = [&](const auto &v0, const auto &v1) {
-    return glm::vec4(preintegrated_r(v0, v1), preintegrated_g(v0, v1), preintegrated_b(v0, v1), preintegrated_a(v0, v1));
+  Texture2D<float> transfer_r = preintegrate_function(pre_size, [&](float v){ return linear_gradient(color_map, v).r; });
+  Texture2D<float> transfer_g = preintegrate_function(pre_size, [&](float v){ return linear_gradient(color_map, v).g; });
+  Texture2D<float> transfer_b = preintegrate_function(pre_size, [&](float v){ return linear_gradient(color_map, v).b; });
+  Texture2D<float> transfer_a = preintegrate_function(pre_size, [&](float v){ return linear_gradient(alpha_map, v); });
+
+  auto transfer_function_scalar = [&](float begin, float end) -> glm::vec4 {
+    begin = (begin + 0.5f) / 256.f;
+    end   = (end   + 0.5f) / 256.f;
+
+    return {
+      sample(transfer_r, begin, end),
+      sample(transfer_g, begin, end),
+      sample(transfer_b, begin, end),
+      sample(transfer_a, begin, end)
+    };
   };
 
   GLFW::Window window(640, 480, "Volumetric Vizualizer");

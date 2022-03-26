@@ -21,7 +21,7 @@ find_package(OpenGL REQUIRED)
 add_executable(vizualize src/vizualize.cc)
 add_executable(vizualize_raw src/vizualize_raw.cc)
 add_executable(process src/process.cc)
-add_executable(test_volume_generator test/test_volume_generator.cc)
+add_executable(test_volume_generator src/test_volume_generator.cc)
 
 target_link_libraries(vizualize glm imgui glfw OpenGL::GL Vc)
 target_link_libraries(vizualize_raw glm  imgui glfw OpenGL::GL Vc)
