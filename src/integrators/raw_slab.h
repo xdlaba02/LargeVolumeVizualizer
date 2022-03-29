@@ -14,7 +14,7 @@
 #include <cstdint>
 
 template <typename T, typename TransferFunctionType>
-glm::vec4 integrate_raw_slab(const RawVolume<T> &volume, const Ray &ray, float stepsize, const TransferFunctionType &transfer_function) {
+glm::vec4 integrate_raw_slab(const RawVolume<T> &volume, const Ray &ray, float step, const TransferFunctionType &transfer_function) {
   glm::vec4 dst(0.f, 0.f, 0.f, 1.f);
 
   RayRange range = intersect_aabb_ray(ray, {0, 0, 0}, { 1, 1, 1 });
@@ -33,7 +33,7 @@ glm::vec4 integrate_raw_slab(const RawVolume<T> &volume, const Ray &ray, float s
 
       slab_start_value = slab_end_value;
       slab_range.min = slab_range.max;
-      slab_range.max = slab_range.max + stepsize;
+      slab_range.max = slab_range.max + step;
     }
   }
 

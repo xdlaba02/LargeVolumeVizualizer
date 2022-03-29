@@ -51,9 +51,6 @@ glm::vec4 integrate_tree_slab(const TreeVolume<T> &volume, const Ray &ray, float
         return false;
       }
 
-      // TODO precompute
-      float stepsize = step / exp2i(layer);
-
       const auto &node = volume.nodes[volume.info.node_handle(block[0], block[1], block[2], layer_index)];
 
       auto node_rgba = transfer_function(node.min, node.max);
@@ -75,7 +72,7 @@ glm::vec4 integrate_tree_slab(const TreeVolume<T> &volume, const Ray &ray, float
 
         slab_start_value = node.min;
         slab_range.min = range.max;
-        slab_range.max = range.max + stepsize;
+        slab_range.max = range.max + step;
 
         return false;
       }
@@ -122,7 +119,7 @@ glm::vec4 integrate_tree_slab(const TreeVolume<T> &volume, const Ray &ray, float
 
           slab_start_value = slab_end_value;
           slab_range.min = slab_range.max;
-          slab_range.max = slab_range.max + stepsize;
+          slab_range.max = slab_range.max + step;
         }
 
         return false;

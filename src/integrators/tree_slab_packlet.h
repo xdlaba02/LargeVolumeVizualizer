@@ -45,7 +45,6 @@ Vec4Packlet integrate_tree_slab_packlet(const TreeVolume<T> &volume, const RayPa
       uint8_t layer_index = std::size(volume.info.layers) - 1 - layer;
 
       Vec3Packlet block;
-      float stepsize = step / exp2i(layer);
 
       for (uint32_t j = 0; j < simd::len; j++) {
         if (mask[j].isEmpty()) {
@@ -120,7 +119,7 @@ Vec4Packlet integrate_tree_slab_packlet(const TreeVolume<T> &volume, const RayPa
 
           slab_start_value[j](node_uniform) = node_min;
           slab_range[j].min(node_uniform) = range[j].max;
-          slab_range[j].max(node_uniform) = range[j].max + stepsize;
+          slab_range[j].max(node_uniform) = range[j].max + step;
 
           mask[j] = mask[j] && !node_uniform;
         }
@@ -148,7 +147,7 @@ Vec4Packlet integrate_tree_slab_packlet(const TreeVolume<T> &volume, const RayPa
 
           slab_start_value[j](integrate_mask[j]) = slab_end_value;
           slab_range[j].min(integrate_mask[j]) = slab_range[j].max;
-          slab_range[j].max(integrate_mask[j]) = slab_range[j].max + stepsize;
+          slab_range[j].max(integrate_mask[j]) = slab_range[j].max + step;
         }
       }
     });

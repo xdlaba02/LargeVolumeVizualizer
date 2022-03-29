@@ -78,7 +78,7 @@ int main(int argc, char *argv[]) {
     };
   };
 
-  GLFW::Window window(640, 480, "Volumetric Vizualizer");
+  GLFW::Window window(1920, 1080, "Volumetric Vizualizer");
 
   std::vector<uint8_t> raster(window.width() * window.height() * 3);
 
@@ -100,7 +100,7 @@ int main(int argc, char *argv[]) {
 
   bool imgui_show = true;
 
-  float step = 0.1f;
+  float step = 0.01f;
   float quality = 0.1f;
   float fov = 45.f;
   int scalar_layer = 0;

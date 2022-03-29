@@ -21,8 +21,6 @@ simd::vec4 integrate_tree_slab_layer_simd(const TreeVolume<T> &volume, const sim
   uint8_t layer_index = std::size(volume.info.layers) - 1 - layer;
 
   if (!mask.isEmpty()) {
-    simd::float_v stepsize = step / exp2i(layer);
-
     simd::RayRange slab_range { range.min, range.min };
     simd::float_v slab_start_value {};
 
@@ -35,7 +33,7 @@ simd::vec4 integrate_tree_slab_layer_simd(const TreeVolume<T> &volume, const sim
 
       slab_start_value = slab_end_value;
       slab_range.min = slab_range.max;
-      slab_range.max = slab_range.max + stepsize;
+      slab_range.max = slab_range.max + step;
 
       mask = mask && slab_range.max < range.max && dst.a > terminate_thresh;
     }

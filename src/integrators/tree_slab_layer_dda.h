@@ -22,8 +22,6 @@ glm::vec4 integrate_tree_slab_layer_dda(const TreeVolume<T> &volume, const Ray &
   uint8_t layer_index = std::size(volume.info.layers) - 1 - layer;
 
   if (range.min < range.max) {
-    float stepsize = step / exp2i(layer);
-
     // First slab in infinitely small because we want to initialize start value with first encountered value without producing output
     RayRange slab_range { range.min, range.min };
     float slab_start_value {};
@@ -71,7 +69,7 @@ glm::vec4 integrate_tree_slab_layer_dda(const TreeVolume<T> &volume, const Ray &
 
         slab_start_value = node.min;
         slab_range.min = range.max;
-        slab_range.max = range.max + stepsize;
+        slab_range.max = range.max + step;
 
         return true;
       }
@@ -90,7 +88,7 @@ glm::vec4 integrate_tree_slab_layer_dda(const TreeVolume<T> &volume, const Ray &
 
         slab_start_value = slab_end_value;
         slab_range.min = slab_range.max;
-        slab_range.max = slab_range.max + stepsize;
+        slab_range.max = slab_range.max + step;
       }
 
       return true;

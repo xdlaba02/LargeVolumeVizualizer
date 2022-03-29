@@ -65,8 +65,6 @@ simd::vec4 integrate_tree_slab_simd(const TreeVolume<T> &volume, const simd::Ray
         }
       }
 
-      float stepsize = step / exp2i(layer);
-
       std::array<uint64_t, simd::len> node_handle;
       simd::float_v node_min;
       simd::float_v node_max;
@@ -102,7 +100,7 @@ simd::vec4 integrate_tree_slab_simd(const TreeVolume<T> &volume, const simd::Ray
 
         slab_start_value(node_uniform) = node_min;
         slab_range.min(node_uniform) = range.max;
-        slab_range.max(node_uniform) = range.max + stepsize;
+        slab_range.max(node_uniform) = range.max + step;
 
         mask = mask && !node_uniform;
 
@@ -129,7 +127,7 @@ simd::vec4 integrate_tree_slab_simd(const TreeVolume<T> &volume, const simd::Ray
 
         slab_start_value(integrate_mask) = slab_end_value;
         slab_range.min(integrate_mask) = slab_range.max;
-        slab_range.max(integrate_mask) = slab_range.max + stepsize;
+        slab_range.max(integrate_mask) = slab_range.max + step;
       }
     });
   }
