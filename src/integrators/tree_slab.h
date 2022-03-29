@@ -84,38 +84,9 @@ glm::vec4 integrate_tree_slab(const TreeVolume<T> &volume, const Ray &ray, float
 
           glm::vec3 in_block = (pos - cell) * exp2i(layer) * float(TreeVolume<T>::SUBVOLUME_SIDE);
 
-          Samplet sampl = samplet(volume, node.block_handle, in_block.x, in_block.y, in_block.z);
+          float slab_end_value = sample(volume, node.block_handle, in_block.x, in_block.y, in_block.z);
 
-          float slab_end_value = linterp(sampl);
-
-          glm::vec4 src = transfer_function(slab_start_value, slab_end_value);
-
-  #if 0
-          std::array<float, 3> grad = gradient(sampl);
-          if (grad[0] || grad[1] || grad[2]) {
-            glm::vec3 gradient_normal = glm::normalize(glm::vec3{grad[0], grad[1], grad[2]});
-
-            glm::vec3 light_direction = glm::normalize(glm::vec3{5, 5, 5} - pos);
-            glm::vec3 halfway_vector  = glm::normalize(ray.direction + light_direction);
-
-            float dot_diff = glm::max(0.f, glm::dot(gradient_normal, light_direction));
-
-            float dot_spec = glm::max(0.f, glm::dot(halfway_vector, gradient_normal));
-
-            static constinit float ka = 0.8f;
-            static constinit float kd = 1.0f;
-            static constinit float ks = 0.0f;
-            static constinit float shininess = 1000.0f;
-
-            float diffuse = kd * dot_diff;
-            float specular = ks * std::pow(dot_spec, shininess);
-
-            src = glm::vec4(glm::clamp(glm::vec3(src) * (ka + diffuse) + specular, 0.f, 1.f), src.a);
-          }
-
-  #endif
-
-          blend(src, dst, slab_range.max - slab_range.min);
+          blend(transfer_function(slab_start_value, slab_end_value), dst, slab_range.max - slab_range.min);
 
           slab_start_value = slab_end_value;
           slab_range.min = slab_range.max;

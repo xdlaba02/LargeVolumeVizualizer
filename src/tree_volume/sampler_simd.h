@@ -10,65 +10,70 @@
 // can safely handle values from interval (-1.f, TreeVolume<T>::SUBVOLUME_SIDE) due to padding and truncation used
 template <typename T>
 inline simd::float_v sample(const TreeVolume<T> &volume, const std::array<uint64_t, simd::len> &block_handle, const simd::float_v &denorm_x, const simd::float_v &denorm_y, const simd::float_v &denorm_z, const simd::float_m &mask) {
-  simd::uint32_v denorm_x_low = denorm_x;
-  simd::uint32_v denorm_y_low = denorm_y;
-  simd::uint32_v denorm_z_low = denorm_z;
-
-  simd::uint32_v denorm_x_high = denorm_x + 1.f;
-  simd::uint32_v denorm_y_high = denorm_y + 1.f;
-  simd::uint32_v denorm_z_high = denorm_z + 1.f;
-
-  simd::float_v frac_x = denorm_x - denorm_x_low;
-  simd::float_v frac_y = denorm_y - denorm_y_low;
-  simd::float_v frac_z = denorm_z - denorm_z_low;
-
-  simd::uint32_v denorm_x_low_interleaved = Morton<TreeVolume<T>::BLOCK_BITS>::interleave(denorm_x_low);
-  simd::uint32_v denorm_y_low_interleaved = Morton<TreeVolume<T>::BLOCK_BITS>::interleave(denorm_y_low);
-  simd::uint32_v denorm_z_low_interleaved = Morton<TreeVolume<T>::BLOCK_BITS>::interleave(denorm_z_low);
-
-  simd::uint32_v denorm_x_high_interleaved = Morton<TreeVolume<T>::BLOCK_BITS>::interleave(denorm_x_high);
-  simd::uint32_v denorm_y_high_interleaved = Morton<TreeVolume<T>::BLOCK_BITS>::interleave(denorm_y_high);
-  simd::uint32_v denorm_z_high_interleaved = Morton<TreeVolume<T>::BLOCK_BITS>::interleave(denorm_z_high);
 
   simd::uint32_v morton_indices[2][2][2];
 
-  morton_indices[0][0][0] = Morton<TreeVolume<T>::BLOCK_BITS>::combine_interleaved(denorm_x_low_interleaved,  denorm_y_low_interleaved,  denorm_z_low_interleaved);
-  morton_indices[0][0][1] = Morton<TreeVolume<T>::BLOCK_BITS>::combine_interleaved(denorm_x_high_interleaved, denorm_y_low_interleaved,  denorm_z_low_interleaved);
-  morton_indices[0][1][0] = Morton<TreeVolume<T>::BLOCK_BITS>::combine_interleaved(denorm_x_low_interleaved,  denorm_y_high_interleaved, denorm_z_low_interleaved);
-  morton_indices[0][1][1] = Morton<TreeVolume<T>::BLOCK_BITS>::combine_interleaved(denorm_x_high_interleaved, denorm_y_high_interleaved, denorm_z_low_interleaved);
-  morton_indices[1][0][0] = Morton<TreeVolume<T>::BLOCK_BITS>::combine_interleaved(denorm_x_low_interleaved,  denorm_y_low_interleaved,  denorm_z_high_interleaved);
-  morton_indices[1][0][1] = Morton<TreeVolume<T>::BLOCK_BITS>::combine_interleaved(denorm_x_high_interleaved, denorm_y_low_interleaved,  denorm_z_high_interleaved);
-  morton_indices[1][1][0] = Morton<TreeVolume<T>::BLOCK_BITS>::combine_interleaved(denorm_x_low_interleaved,  denorm_y_high_interleaved, denorm_z_high_interleaved);
-  morton_indices[1][1][1] = Morton<TreeVolume<T>::BLOCK_BITS>::combine_interleaved(denorm_x_high_interleaved, denorm_y_high_interleaved, denorm_z_high_interleaved);
+  simd::float_v frac_x;
+  simd::float_v frac_y;
+  simd::float_v frac_z;
 
-  simd::int32_v buffers[2][2][2];
+  {
+    simd::uint32_v vox_x_low = denorm_x;
+    simd::uint32_v vox_y_low = denorm_y;
+    simd::uint32_v vox_z_low = denorm_z;
+
+    simd::uint32_v vox_x_high = denorm_x + 1.f;
+    simd::uint32_v vox_y_high = denorm_y + 1.f;
+    simd::uint32_v vox_z_high = denorm_z + 1.f;
+
+    frac_x = denorm_x - vox_x_low;
+    frac_y = denorm_y - vox_y_low;
+    frac_z = denorm_z - vox_z_low;
+
+    vox_x_low = Morton<TreeVolume<T>::BLOCK_BITS>::interleave(vox_x_low);
+    vox_y_low = Morton<TreeVolume<T>::BLOCK_BITS>::interleave(vox_y_low);
+    vox_z_low = Morton<TreeVolume<T>::BLOCK_BITS>::interleave(vox_z_low);
+
+    vox_x_high = Morton<TreeVolume<T>::BLOCK_BITS>::interleave(vox_x_high);
+    vox_y_high = Morton<TreeVolume<T>::BLOCK_BITS>::interleave(vox_y_high);
+    vox_z_high = Morton<TreeVolume<T>::BLOCK_BITS>::interleave(vox_z_high);
+
+    morton_indices[0][0][0] = Morton<TreeVolume<T>::BLOCK_BITS>::combine_interleaved(vox_x_low,  vox_y_low,  vox_z_low);
+    morton_indices[0][0][1] = Morton<TreeVolume<T>::BLOCK_BITS>::combine_interleaved(vox_x_high, vox_y_low,  vox_z_low);
+    morton_indices[0][1][0] = Morton<TreeVolume<T>::BLOCK_BITS>::combine_interleaved(vox_x_low,  vox_y_high, vox_z_low);
+    morton_indices[0][1][1] = Morton<TreeVolume<T>::BLOCK_BITS>::combine_interleaved(vox_x_high, vox_y_high, vox_z_low);
+    morton_indices[1][0][0] = Morton<TreeVolume<T>::BLOCK_BITS>::combine_interleaved(vox_x_low,  vox_y_low,  vox_z_high);
+    morton_indices[1][0][1] = Morton<TreeVolume<T>::BLOCK_BITS>::combine_interleaved(vox_x_high, vox_y_low,  vox_z_high);
+    morton_indices[1][1][0] = Morton<TreeVolume<T>::BLOCK_BITS>::combine_interleaved(vox_x_low,  vox_y_high, vox_z_high);
+    morton_indices[1][1][1] = Morton<TreeVolume<T>::BLOCK_BITS>::combine_interleaved(vox_x_high, vox_y_high, vox_z_high);
+  }
+
+  simd::float_v acc[2][2][2];
 
   for (uint32_t k = 0; k < simd::len; k++) {
     if (mask[k]) {
-      buffers[0][0][0][k] = volume.blocks[block_handle[k]][morton_indices[0][0][0][k]];
-      buffers[0][0][1][k] = volume.blocks[block_handle[k]][morton_indices[0][0][1][k]];
-      buffers[0][1][0][k] = volume.blocks[block_handle[k]][morton_indices[0][1][0][k]];
-      buffers[0][1][1][k] = volume.blocks[block_handle[k]][morton_indices[0][1][1][k]];
-      buffers[1][0][0][k] = volume.blocks[block_handle[k]][morton_indices[1][0][0][k]];
-      buffers[1][0][1][k] = volume.blocks[block_handle[k]][morton_indices[1][0][1][k]];
-      buffers[1][1][0][k] = volume.blocks[block_handle[k]][morton_indices[1][1][0][k]];
-      buffers[1][1][1][k] = volume.blocks[block_handle[k]][morton_indices[1][1][1][k]];
+      acc[0][0][0][k] = volume.blocks[block_handle[k]][morton_indices[0][0][0][k]];
+      acc[0][0][1][k] = volume.blocks[block_handle[k]][morton_indices[0][0][1][k]];
+      acc[0][1][0][k] = volume.blocks[block_handle[k]][morton_indices[0][1][0][k]];
+      acc[0][1][1][k] = volume.blocks[block_handle[k]][morton_indices[0][1][1][k]];
+      acc[1][0][0][k] = volume.blocks[block_handle[k]][morton_indices[1][0][0][k]];
+      acc[1][0][1][k] = volume.blocks[block_handle[k]][morton_indices[1][0][1][k]];
+      acc[1][1][0][k] = volume.blocks[block_handle[k]][morton_indices[1][1][0][k]];
+      acc[1][1][1][k] = volume.blocks[block_handle[k]][morton_indices[1][1][1][k]];
     }
   }
 
-  simd::float_v accs[2][2];
+  acc[0][0][0] = acc[0][0][0] + (acc[0][0][1] - acc[0][0][0]) * frac_x;
+  acc[0][1][0] = acc[0][1][0] + (acc[0][1][1] - acc[0][1][0]) * frac_x;
+  acc[1][0][0] = acc[1][0][0] + (acc[1][0][1] - acc[1][0][0]) * frac_x;
+  acc[1][1][0] = acc[1][1][0] + (acc[1][1][1] - acc[1][1][0]) * frac_x;
 
-  accs[0][0] = buffers[0][0][0] + (buffers[0][0][1] - buffers[0][0][0]) * frac_x;
-  accs[0][1] = buffers[0][1][0] + (buffers[0][1][1] - buffers[0][1][0]) * frac_x;
-  accs[1][0] = buffers[1][0][0] + (buffers[1][0][1] - buffers[1][0][0]) * frac_x;
-  accs[1][1] = buffers[1][1][0] + (buffers[1][1][1] - buffers[1][1][0]) * frac_x;
+  acc[0][0][0] += (acc[0][1][0] - acc[0][0][0]) * frac_y;
+  acc[1][0][0] += (acc[1][1][0] - acc[1][0][0]) * frac_y;
 
-  accs[0][0] += (accs[0][1] - accs[0][0]) * frac_y;
-  accs[1][0] += (accs[1][1] - accs[1][0]) * frac_y;
+  acc[0][0][0] += (acc[1][0][0] - acc[0][0][0]) * frac_z;
 
-  accs[0][0] += (accs[1][0] - accs[0][0]) * frac_z;
-
-  return accs[0][0];
+  return acc[0][0][0];
 }
 
 // expects coordinates from interval <0, 1>

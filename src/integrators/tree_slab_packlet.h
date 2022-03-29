@@ -139,7 +139,7 @@ Vec4Packlet integrate_tree_slab_packlet(const TreeVolume<T> &volume, const RayPa
           for (uint32_t k = 0; k < simd::len; k++) {
             if (integrate_mask[j][k]) {
               uint64_t node_handle = volume.info.node_handle(block[j].x[k], block[j].y[k], block[j].z[k], layer_index);
-              slab_end_value[k] = linterp(samplet(volume, volume.nodes[node_handle].block_handle, in_block.x[k], in_block.y[k], in_block.z[k]));
+              slab_end_value[k] = sample(volume, volume.nodes[node_handle].block_handle, in_block.x[k], in_block.y[k], in_block.z[k]);
             }
           }
 

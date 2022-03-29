@@ -119,7 +119,7 @@ simd::vec4 integrate_tree_slab_simd(const TreeVolume<T> &volume, const simd::Ray
 
         for (uint32_t k = 0; k < simd::len; k++) {
           if (integrate_mask[k]) {
-            slab_end_value[k] = linterp(samplet(volume, volume.nodes[node_handle[k]].block_handle, in_block.x[k], in_block.y[k], in_block.z[k]));
+            slab_end_value[k] = sample(volume, volume.nodes[node_handle[k]].block_handle, in_block.x[k], in_block.y[k], in_block.z[k]);
           }
         }
 

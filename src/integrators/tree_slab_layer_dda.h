@@ -80,7 +80,7 @@ glm::vec4 integrate_tree_slab_layer_dda(const TreeVolume<T> &volume, const Ray &
 
         glm::vec3 in_block = (pos - glm::vec3(block)) * float(TreeVolume<T>::SUBVOLUME_SIDE);
 
-        float slab_end_value = linterp(samplet(volume, node.block_handle, in_block.x, in_block.y, in_block.z));
+        float slab_end_value = sample(volume, node.block_handle, in_block.x, in_block.y, in_block.z);
 
         glm::vec4 src = transfer_function(slab_start_value, slab_end_value);
 
