@@ -45,7 +45,7 @@ Vec4Packlet integrate_tree_slab_packlet(const TreeVolume<T> &volume, const RayPa
       uint8_t layer_index = std::size(volume.info.layers) - 1 - layer;
 
       Vec3Packlet block;
-      float stepsize = step * exp2i(layer_index);
+      float stepsize = step / exp2i(layer);
 
       for (uint32_t j = 0; j < simd::len; j++) {
         if (mask[j].isEmpty()) {

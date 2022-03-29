@@ -5,8 +5,8 @@
 #include <ray/traversal_octree_packlet.h>
 
 template <typename F>
-void render_packlet(uint32_t width, uint32_t height, float fov, const glm::mat4 &model, const glm::mat4 &view, uint8_t *rgb_buffer, const F &integrator) {
-  glm::mat4 ray_transform = glm::inverse(view * model);
+void render_packlet(uint32_t width, uint32_t height, float fov, const glm::mat4 &vmt, uint8_t *rgb_buffer, const F &integrator) {
+  glm::mat4 ray_transform = glm::inverse(vmt);
 
   glm::vec3 ray_origin = ray_transform * glm::vec4(0.f, 0.f, 0.f, 1.f);
 

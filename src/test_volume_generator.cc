@@ -52,15 +52,17 @@ int main(int argc, char *argv[]) {
 
   uint64_t block_handle = 0;
 
-  for (uint8_t layer = 0; layer < std::size(info.layers); layer++) {
-    std::cerr << "layer: " << (int)layer << "\n";
-    std::cerr << info.layers[layer].width_in_blocks << " " << info.layers[layer].height_in_blocks << " " << info.layers[layer].depth_in_blocks << "\n";
+  for (uint8_t layer_index = 0; layer_index < std::size(info.layers); layer_index++) {
+    uint8_t layer = std::size(info.layers) - layer_index - 1;
+    
+    std::cerr << "layer_index: " << (int)layer_index << "\n";
+    std::cerr << info.layers[layer_index].width_in_blocks << " " << info.layers[layer_index].height_in_blocks << " " << info.layers[layer_index].depth_in_blocks << "\n";
     #pragma omp parallel for
-    for (uint32_t block_z = 0; block_z < info.layers[layer].depth_in_blocks; block_z++) {
-      for (uint32_t block_y = 0; block_y < info.layers[layer].height_in_blocks; block_y++) {
-        for (uint32_t block_x = 0; block_x < info.layers[layer].width_in_blocks; block_x++) {
+    for (uint32_t block_z = 0; block_z < info.layers[layer_index].depth_in_blocks; block_z++) {
+      for (uint32_t block_y = 0; block_y < info.layers[layer_index].height_in_blocks; block_y++) {
+        for (uint32_t block_x = 0; block_x < info.layers[layer_index].width_in_blocks; block_x++) {
 
-          TreeVolume<uint8_t>::Node &node = nodes[info.node_handle(block_x, block_y, block_z, layer)];
+          TreeVolume<uint8_t>::Node &node = nodes[info.node_handle(block_x, block_y, block_z, layer_index)];
 
           node.block_handle = 0;
           node.min    = 255;
@@ -68,8 +70,11 @@ int main(int argc, char *argv[]) {
 
           TreeVolume<uint8_t>::Block block {};
 
+
+          uint32_t block_val = layer * 2 + ((block_x & 1) ^ (block_y & 1) ^ (block_z & 1));
+
           for (uint32_t i = 0; i < TreeVolume<uint8_t>::BLOCK_SIZE; i++) {
-            block[i] = layer;
+            block[i] = block_val;
           }
 
           #pragma omp critical

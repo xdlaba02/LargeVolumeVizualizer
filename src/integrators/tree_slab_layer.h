@@ -16,8 +16,10 @@ glm::vec4 integrate_tree_slab_layer(const TreeVolume<T> &volume, const Ray &ray,
 
   RayRange range = intersect_aabb_ray(ray, {0, 0, 0}, { volume.info.width_frac, volume.info.height_frac, volume.info.depth_frac});
 
+  uint8_t layer_index = std::size(volume.info.layers) - 1 - layer;
+
   if (range.min < range.max) {
-    float stepsize = step * exp2i(layer);
+    float stepsize = step / exp2i(layer);
 
     RayRange slab_range { range.min, range.min };
 
@@ -26,7 +28,7 @@ glm::vec4 integrate_tree_slab_layer(const TreeVolume<T> &volume, const Ray &ray,
     while (slab_range.max < range.max && dst.a > terminate_thresh) {
       glm::vec3 sample_pos = ray.origin + ray.direction * slab_range.max;
 
-      float slab_end_value = sample(volume, sample_pos.x, sample_pos.y, sample_pos.z, layer);
+      float slab_end_value = sample(volume, sample_pos.x, sample_pos.y, sample_pos.z, layer_index);
 
       blend(transfer_function(slab_end_value, slab_start_value), dst, slab_range.max - slab_range.min);
 

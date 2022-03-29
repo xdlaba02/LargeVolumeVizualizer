@@ -65,7 +65,7 @@ simd::vec4 integrate_tree_slab_simd(const TreeVolume<T> &volume, const simd::Ray
         }
       }
 
-      float stepsize = step * exp2i(layer_index);
+      float stepsize = step / exp2i(layer);
 
       std::array<uint64_t, simd::len> node_handle;
       simd::float_v node_min;

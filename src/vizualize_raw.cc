@@ -139,8 +139,6 @@ int main(int argc, char *argv[]) {
       }
     }
 
-    // TODO hide transforms into object and camera class
-    // by default, the volume is rendered in the interval [0, volume.info.frac]
     glm::mat4 model = glm::translate(glm::mat4(1.f), volume_pos)
                     * glm::rotate(glm::mat4(1.f), t, glm::vec3(0.f, 1.f, 0.f))
                     * glm::rotate(glm::mat4(1.f), glm::radians(90.f), glm::vec3(1.f, 0.f, 0.f))

@@ -144,36 +144,25 @@ int main(int argc, char *argv[]) {
                 uint32_t voxel_x = block_start_x + in_block_x;
                 uint32_t original_voxel_x = voxel_x << 1;
 
-                uint32_t accumulator = 0;
 
-                for (uint32_t original_z: {original_voxel_z, original_voxel_z + 1}) {
+                uint32_t original_block_z = std::min(original_voxel_z / TreeVolume<uint8_t>::SUBVOLUME_SIDE, info.layers[layer - 1].depth_in_blocks  - 1);
+                uint32_t original_in_block_z = std::min(original_voxel_z - original_block_z * TreeVolume<uint8_t>::SUBVOLUME_SIDE, TreeVolume<uint8_t>::SUBVOLUME_SIDE - 1);
 
-                  uint32_t original_block_z = std::min(original_z / TreeVolume<uint8_t>::SUBVOLUME_SIDE, info.layers[layer - 1].depth_in_blocks  - 1);
-                  uint32_t original_in_block_z = std::min(original_z - original_block_z * TreeVolume<uint8_t>::SUBVOLUME_SIDE, TreeVolume<uint8_t>::SUBVOLUME_SIDE - 1);
+                uint32_t original_block_y = std::min(original_voxel_y / TreeVolume<uint8_t>::SUBVOLUME_SIDE, info.layers[layer - 1].height_in_blocks - 1);
+                uint32_t original_in_block_y = std::min(original_voxel_y - original_block_y * TreeVolume<uint8_t>::SUBVOLUME_SIDE, TreeVolume<uint8_t>::SUBVOLUME_SIDE - 1);
 
-                  for (uint32_t original_y: {original_voxel_y, original_voxel_y + 1}) {
+                uint32_t original_block_x = std::min(original_voxel_x / TreeVolume<uint8_t>::SUBVOLUME_SIDE, info.layers[layer - 1].width_in_blocks  - 1);
+                uint32_t original_in_block_x = std::min(original_voxel_x - original_block_x * TreeVolume<uint8_t>::SUBVOLUME_SIDE, TreeVolume<uint8_t>::SUBVOLUME_SIDE - 1);
 
-                    uint32_t original_block_y = std::min(original_y / TreeVolume<uint8_t>::SUBVOLUME_SIDE, info.layers[layer - 1].height_in_blocks - 1);
-                    uint32_t original_in_block_y = std::min(original_y - original_block_y * TreeVolume<uint8_t>::SUBVOLUME_SIDE, TreeVolume<uint8_t>::SUBVOLUME_SIDE - 1);
+                TreeVolume<uint8_t>::Node &original_node = nodes[info.node_handle(original_block_x, original_block_y, original_block_z, layer - 1)];
 
-                    for (uint32_t original_x: {original_voxel_x, original_voxel_x + 1}) {
-
-                      uint32_t original_block_x = std::min(original_x / TreeVolume<uint8_t>::SUBVOLUME_SIDE, info.layers[layer - 1].width_in_blocks  - 1);
-                      uint32_t original_in_block_x = std::min(original_x - original_block_x * TreeVolume<uint8_t>::SUBVOLUME_SIDE, TreeVolume<uint8_t>::SUBVOLUME_SIDE - 1);
-
-                      TreeVolume<uint8_t>::Node &original_node = nodes[info.node_handle(original_block_x, original_block_y, original_block_z, layer - 1)];
-
-                      if (original_node.min != original_node.max) {
-                        accumulator += blocks[original_node.block_handle][Morton<TreeVolume<uint8_t>::BLOCK_BITS>::to_index(original_in_block_x, original_in_block_y, original_in_block_z)];
-                      }
-                      else {
-                        accumulator += original_node.min;
-                      }
-                    }
-                  }
+                uint32_t value;
+                if (original_node.min != original_node.max) {
+                  value = blocks[original_node.block_handle][Morton<TreeVolume<uint8_t>::BLOCK_BITS>::to_index(original_in_block_x, original_in_block_y, original_in_block_z)];
                 }
-
-                uint32_t value = accumulator >> 3;
+                else {
+                  value = original_node.min;
+                }
 
                 node.min = std::min<uint32_t>(node.min, value);
                 node.max = std::max<uint32_t>(node.max, value);

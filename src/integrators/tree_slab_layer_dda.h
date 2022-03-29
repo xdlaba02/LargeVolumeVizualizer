@@ -19,16 +19,16 @@ glm::vec4 integrate_tree_slab_layer_dda(const TreeVolume<T> &volume, const Ray &
 
   RayRange range = intersect_aabb_ray(ray, {0.f, 0.f, 0.f}, { volume.info.width_frac, volume.info.height_frac, volume.info.depth_frac});
 
+  uint8_t layer_index = std::size(volume.info.layers) - 1 - layer;
+
   if (range.min < range.max) {
-    float stepsize = step * exp2i(layer);
+    float stepsize = step / exp2i(layer);
 
     // First slab in infinitely small because we want to initialize start value with first encountered value without producing output
     RayRange slab_range { range.min, range.min };
     float slab_start_value {};
 
-    uint8_t layer_index = std::size(volume.info.layers) - 1 - layer;
-
-    Ray scaled_ray { ray.origin * exp2i(layer_index), ray.direction * exp2i(layer_index), 1.f / (ray.direction * exp2i(layer_index)) };
+    Ray scaled_ray { ray.origin * exp2i(layer), ray.direction * exp2i(layer), 1.f / (ray.direction * exp2i(layer)) };
 
     ray_raster_traversal(scaled_ray, range, [&](const RayRange &range, const glm::vec<3, uint32_t> &block) {
 
@@ -42,15 +42,15 @@ glm::vec4 integrate_tree_slab_layer_dda(const TreeVolume<T> &volume, const Ray &
         return true;
       }
 
-      if (block.x >= volume.info.layers[layer].width_in_blocks
-      ||  block.y >= volume.info.layers[layer].height_in_blocks
-      ||  block.z >= volume.info.layers[layer].depth_in_blocks) {
+      if (block.x >= volume.info.layers[layer_index].width_in_blocks
+      ||  block.y >= volume.info.layers[layer_index].height_in_blocks
+      ||  block.z >= volume.info.layers[layer_index].depth_in_blocks) {
         slab_range.min = range.max;
         slab_range.max = range.max;
         return true;
       }
 
-      const auto &node = volume.nodes[volume.info.node_handle(block.x, block.y, block.z, layer)];
+      const auto &node = volume.nodes[volume.info.node_handle(block.x, block.y, block.z, layer_index)];
 
       auto node_rgba = transfer_function(node.min, node.max);
 

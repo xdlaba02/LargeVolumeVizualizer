@@ -52,7 +52,7 @@ glm::vec4 integrate_tree_slab(const TreeVolume<T> &volume, const Ray &ray, float
       }
 
       // TODO precompute
-      float stepsize = step * exp2i(layer_index);
+      float stepsize = step / exp2i(layer);
 
       const auto &node = volume.nodes[volume.info.node_handle(block[0], block[1], block[2], layer_index)];
 
