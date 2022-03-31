@@ -54,7 +54,7 @@ int main(int argc, char *argv[]) {
 
   for (uint8_t layer_index = 0; layer_index < std::size(info.layers); layer_index++) {
     uint8_t layer = std::size(info.layers) - layer_index - 1;
-    
+
     std::cerr << "layer_index: " << (int)layer_index << "\n";
     std::cerr << info.layers[layer_index].width_in_blocks << " " << info.layers[layer_index].height_in_blocks << " " << info.layers[layer_index].depth_in_blocks << "\n";
     #pragma omp parallel for

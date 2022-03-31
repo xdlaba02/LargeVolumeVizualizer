@@ -170,15 +170,15 @@ int main(int argc, char *argv[]) {
 
     glm::mat4 view = glm::lookAt(camera_pos, camera_pos + camera_front, camera_up);
 
-    /*
     render_scalar(window.width(), window.height(), fov, view * model, raster.data(), [&](const Ray &ray) {
       return integrate_raw_slab(volume, ray, step, terminate_thresh, transfer_function_scalar);
     });
-    */
 
+    /*
     render_simd(window.width(), window.height(), fov, view * model, raster.data(), [&](const simd::Ray &ray, const simd::float_m &mask) {
       return integrate_raw_slab_simd(volume, ray, step, terminate_thresh, mask, transfer_function_vector);
     });
+    */
 
     window.makeContextCurrent();
 

@@ -52,14 +52,13 @@ inline simd::float_v sample(const TreeVolume<T> &volume, const std::array<uint64
 
   for (uint32_t k = 0; k < simd::len; k++) {
     if (mask[k]) {
-      acc[0][0][0][k] = volume.blocks[block_handle[k]][morton_indices[0][0][0][k]];
-      acc[0][0][1][k] = volume.blocks[block_handle[k]][morton_indices[0][0][1][k]];
-      acc[0][1][0][k] = volume.blocks[block_handle[k]][morton_indices[0][1][0][k]];
-      acc[0][1][1][k] = volume.blocks[block_handle[k]][morton_indices[0][1][1][k]];
-      acc[1][0][0][k] = volume.blocks[block_handle[k]][morton_indices[1][0][0][k]];
-      acc[1][0][1][k] = volume.blocks[block_handle[k]][morton_indices[1][0][1][k]];
-      acc[1][1][0][k] = volume.blocks[block_handle[k]][morton_indices[1][1][0][k]];
-      acc[1][1][1][k] = volume.blocks[block_handle[k]][morton_indices[1][1][1][k]];
+      for (uint8_t z = 0; z < 2; z++) {
+        for (uint8_t y = 0; y < 2; y++) {
+          for (uint8_t x = 0; x < 2; x++) {
+            acc[z][y][x][k] = volume.blocks[block_handle[k]][morton_indices[z][y][x][k]];
+          }
+        }
+      }
     }
   }
 
