@@ -2,8 +2,6 @@
 
 #include "raw_volume.h"
 
-#include <iostream>
-
 template <typename T>
 inline float sample(const RawVolume<T> &volume, float x, float y, float z) {
   float denorm_x = x * volume.width  - 0.5f;
@@ -45,10 +43,6 @@ inline float sample(const RawVolume<T> &volume, float x, float y, float z) {
   acc[1][0][0] += (acc[1][1][0] - acc[1][0][0]) * frac_y;
 
   acc[0][0][0] += (acc[1][0][0] - acc[0][0][0]) * frac_z;
-
-  if (acc[0][0][0] < 0.f) {
-    std::cerr << "ERR\n";
-  }
 
   return acc[0][0][0];
 };

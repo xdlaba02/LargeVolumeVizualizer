@@ -26,8 +26,6 @@ inline simd::float_v sample(const RawVolume<T> &volume, const simd::float_v &x, 
   simd::float_v frac_y = denorm_y - vox_y[0];
   simd::float_v frac_z = denorm_z - vox_z[0];
 
-  uint64_t base = volume.voxel_handle(vox_x, vox_y, vox_z);
-
   simd::float_v acc[2][2][2];
 
   for (uint32_t k = 0; k < simd::len; k++) {
