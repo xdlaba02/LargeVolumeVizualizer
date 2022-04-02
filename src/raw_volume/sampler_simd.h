@@ -3,6 +3,7 @@
 #include "raw_volume.h"
 
 #include <utils/simd.h>
+#include <utils/linear_interpolation.h>
 
 template <typename T>
 inline simd::float_v sample(const RawVolume<T> &volume, const simd::float_v &x, const simd::float_v &y, const simd::float_v &z, const simd::float_m &mask) {
@@ -40,15 +41,7 @@ inline simd::float_v sample(const RawVolume<T> &volume, const simd::float_v &x, 
     }
   }
 
-  acc[0][0][0] = acc[0][0][0] + (acc[0][0][1] - acc[0][0][0]) * frac_x;
-  acc[0][1][0] = acc[0][1][0] + (acc[0][1][1] - acc[0][1][0]) * frac_x;
-  acc[1][0][0] = acc[1][0][0] + (acc[1][0][1] - acc[1][0][0]) * frac_x;
-  acc[1][1][0] = acc[1][1][0] + (acc[1][1][1] - acc[1][1][0]) * frac_x;
-
-  acc[0][0][0] += (acc[0][1][0] - acc[0][0][0]) * frac_y;
-  acc[1][0][0] += (acc[1][1][0] - acc[1][0][0]) * frac_y;
-
-  acc[0][0][0] += (acc[1][0][0] - acc[0][0][0]) * frac_z;
+  interpolate(acc, frac_x, frac_y, frac_z);
 
   return acc[0][0][0];
 };

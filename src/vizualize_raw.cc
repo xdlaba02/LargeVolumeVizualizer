@@ -91,7 +91,7 @@ int main(int argc, char *argv[]) {
   glm::vec3 volume_pos      = glm::vec3(0.0f, 0.0f, 0.0f);
   glm::vec3 volume_rotation = glm::vec3(0.0f, 0.0f, 0.0f);
 
-  float step = 0.01f;
+  float step = 0.001f;
   float fov = 45.f;
   float terminate_thresh = 0.01f;
 

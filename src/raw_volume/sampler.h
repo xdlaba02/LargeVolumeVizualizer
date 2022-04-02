@@ -2,6 +2,8 @@
 
 #include "raw_volume.h"
 
+#include <utils/linear_interpolation.h>
+
 template <typename T>
 inline float sample(const RawVolume<T> &volume, float x, float y, float z) {
   float denorm_x = x * volume.width  - 0.5f;
@@ -34,15 +36,7 @@ inline float sample(const RawVolume<T> &volume, float x, float y, float z) {
     }
   }
 
-  acc[0][0][0] = acc[0][0][0] + (acc[0][0][1] - acc[0][0][0]) * frac_x;
-  acc[0][1][0] = acc[0][1][0] + (acc[0][1][1] - acc[0][1][0]) * frac_x;
-  acc[1][0][0] = acc[1][0][0] + (acc[1][0][1] - acc[1][0][0]) * frac_x;
-  acc[1][1][0] = acc[1][1][0] + (acc[1][1][1] - acc[1][1][0]) * frac_x;
-
-  acc[0][0][0] += (acc[0][1][0] - acc[0][0][0]) * frac_y;
-  acc[1][0][0] += (acc[1][1][0] - acc[1][0][0]) * frac_y;
-
-  acc[0][0][0] += (acc[1][0][0] - acc[0][0][0]) * frac_z;
+  interpolate(acc, frac_x, frac_y, frac_z);
 
   return acc[0][0][0];
 };

@@ -12,9 +12,7 @@ set(CMAKE_CXX_FLAGS_DEBUG "-O0")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -DNDEBUG")
 
 add_subdirectory(external)
-
-# ugly but easy, ok for smol project
-file(GLOB SRC_FILES CONFIGURE_DEPENDS src/*.cc)
+add_subdirectory(utils)
 
 find_package(OpenGL REQUIRED)
 

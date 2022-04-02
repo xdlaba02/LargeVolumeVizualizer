@@ -4,6 +4,7 @@
 
 #include <utils/morton.h>
 #include <utils/utils.h>
+#include <utils/linear_interpolation.h>
 
 // expects coordinates from interval <-.5f, TreeVolume<T>::SUBVOLUME_SIDE - .5f>
 // can safely handle values from interval (-1.f, TreeVolume<T>::SUBVOLUME_SIDE) due to truncation used
@@ -43,15 +44,7 @@ inline float sample(const TreeVolume<T> &volume, uint64_t block_handle, float de
     }
   }
 
-  acc[0][0][0] = acc[0][0][0] + (acc[0][0][1] - acc[0][0][0]) * frac_x;
-  acc[0][1][0] = acc[0][1][0] + (acc[0][1][1] - acc[0][1][0]) * frac_x;
-  acc[1][0][0] = acc[1][0][0] + (acc[1][0][1] - acc[1][0][0]) * frac_x;
-  acc[1][1][0] = acc[1][1][0] + (acc[1][1][1] - acc[1][1][0]) * frac_x;
-
-  acc[0][0][0] += (acc[0][1][0] - acc[0][0][0]) * frac_y;
-  acc[1][0][0] += (acc[1][1][0] - acc[1][0][0]) * frac_y;
-
-  acc[0][0][0] += (acc[1][0][0] - acc[0][0][0]) * frac_z;
+  interpolate(acc, frac_x, frac_y, frac_z);
 
   return acc[0][0][0];
 }
@@ -61,9 +54,9 @@ template <typename T>
 inline float sample(const TreeVolume<T> &volume, float x, float y, float z, uint8_t layer) {
   uint8_t layer_index = std::size(volume.info.layers) - 1 - layer;
 
-  float denorm_x = x * exp2i(layer_index) * float(TreeVolume<T>::SUBVOLUME_SIDE) - 0.5f;
-  float denorm_y = y * exp2i(layer_index) * float(TreeVolume<T>::SUBVOLUME_SIDE) - 0.5f;
-  float denorm_z = z * exp2i(layer_index) * float(TreeVolume<T>::SUBVOLUME_SIDE) - 0.5f;
+  float denorm_x = x * exp2i(layer_index) * TreeVolume<T>::SUBVOLUME_SIDE - 0.5f;
+  float denorm_y = y * exp2i(layer_index) * TreeVolume<T>::SUBVOLUME_SIDE - 0.5f;
+  float denorm_z = z * exp2i(layer_index) * TreeVolume<T>::SUBVOLUME_SIDE - 0.5f;
 
   uint32_t vox_x = denorm_x;
   uint32_t vox_y = denorm_y;

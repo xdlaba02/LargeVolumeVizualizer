@@ -20,9 +20,12 @@ template <typename T, typename TransferFunctionType, typename IntegratePredicate
 Vec4Packlet integrate_tree_slab_packlet(const TreeVolume<T> &volume, const RayPacklet &ray, float step, float terminate_thresh, MaskPacklet mask, const TransferFunctionType &transfer_function, const IntegratePredicate &integrate_predicate) {
   Vec4Packlet dst;
 
+  using BlockHandlePacklet = std::array<std::array<uint64_t, simd::len>, simd::len>;
+
   RayRangePacklet range;
   RayRangePacklet slab_range;
   FloatPacklet slab_start_value;
+  BlockHandlePacklet block_handle;
 
   bool packlet_not_empty = false;
   for (uint32_t j = 0; j < simd::len; j++) {
@@ -89,6 +92,7 @@ Vec4Packlet integrate_tree_slab_packlet(const TreeVolume<T> &volume, const RayPa
             uint64_t node_handle = volume.info.node_handle(block[j].x[k], block[j].y[k], block[j].z[k], layer_index);
             node_min[k] = volume.nodes[node_handle].min;
             node_max[k] = volume.nodes[node_handle].max;
+            block_handle[j][k] = volume.nodes[node_handle].block_handle;
           }
         }
 
@@ -128,20 +132,12 @@ Vec4Packlet integrate_tree_slab_packlet(const TreeVolume<T> &volume, const RayPa
       MaskPacklet integrate_mask = integrate_predicate(cell, layer, mask);
 
       for (uint32_t j = 0; j < simd::len; j++) {
-        // Numeric integration
         for (integrate_mask[j] &= mask[j] & (slab_range[j].max < range[j].max); integrate_mask[j].isNotEmpty(); integrate_mask[j] &= slab_range[j].max < range[j].max) {
           simd::vec3 pos = ray[j].origin + ray[j].direction * slab_range[j].max;
 
           simd::vec3 in_block = (pos - cell[j]) * simd::float_v(exp2i(layer)) * simd::float_v(TreeVolume<T>::SUBVOLUME_SIDE);
 
-          simd::float_v slab_end_value;
-
-          for (uint32_t k = 0; k < simd::len; k++) {
-            if (integrate_mask[j][k]) {
-              uint64_t node_handle = volume.info.node_handle(block[j].x[k], block[j].y[k], block[j].z[k], layer_index);
-              slab_end_value[k] = sample(volume, volume.nodes[node_handle].block_handle, in_block.x[k], in_block.y[k], in_block.z[k]);
-            }
-          }
+          simd::float_v slab_end_value = sample(volume, block_handle[j], in_block.x, in_block.y, in_block.z, integrate_mask[j]);
 
           blend(transfer_function(slab_start_value[j], slab_end_value, integrate_mask[j]), dst[j], slab_range[j].max - slab_range[j].min, integrate_mask[j]);
 

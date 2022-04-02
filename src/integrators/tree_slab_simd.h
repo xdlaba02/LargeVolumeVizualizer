@@ -65,15 +65,16 @@ simd::vec4 integrate_tree_slab_simd(const TreeVolume<T> &volume, const simd::Ray
         }
       }
 
-      std::array<uint64_t, simd::len> node_handle;
+      std::array<uint64_t, simd::len> block_handle;
       simd::float_v node_min;
       simd::float_v node_max;
 
       for (uint32_t k = 0; k < simd::len; k++) {
         if (mask[k]) {
-          node_handle[k] = volume.info.node_handle(block[0][k], block[1][k], block[2][k], layer_index);
-          node_min[k] = volume.nodes[node_handle[k]].min;
-          node_max[k] = volume.nodes[node_handle[k]].max;
+          uint64_t node_handle = volume.info.node_handle(block[0][k], block[1][k], block[2][k], layer_index);
+          node_min[k] = volume.nodes[node_handle].min;
+          node_max[k] = volume.nodes[node_handle].max;
+          block_handle[k] = volume.nodes[node_handle].block_handle;
         }
       }
 
@@ -115,13 +116,7 @@ simd::vec4 integrate_tree_slab_simd(const TreeVolume<T> &volume, const simd::Ray
 
         simd::vec3 in_block = (pos - cell) * simd::float_v(exp2i(layer)) * simd::float_v(TreeVolume<T>::SUBVOLUME_SIDE);
 
-        simd::float_v slab_end_value;
-
-        for (uint32_t k = 0; k < simd::len; k++) {
-          if (integrate_mask[k]) {
-            slab_end_value[k] = sample(volume, volume.nodes[node_handle[k]].block_handle, in_block.x[k], in_block.y[k], in_block.z[k]);
-          }
-        }
+        simd::float_v slab_end_value = sample(volume, block_handle, in_block.x, in_block.y, in_block.z, integrate_mask);
 
         blend(transfer_function(slab_start_value, slab_end_value, integrate_mask), dst, slab_range.max - slab_range.min, integrate_mask);
 

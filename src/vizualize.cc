@@ -147,8 +147,8 @@ int main(int argc, char *argv[]) {
 
   bool imgui_show = true;
 
-  float step = 0.01f;
-  float quality = 0.1f;
+  float step = 0.001f;
+  float quality = 0.01f;
   float fov = 45.f;
   int scalar_layer = 0;
   float terminate_thresh = 0.01f;
@@ -259,7 +259,7 @@ int main(int argc, char *argv[]) {
 
         if (renderer == RENDERER_TREE_SCALAR || renderer == RENDERER_TREE_VECTOR || renderer == RENDERER_TREE_PACKLET) {
           //ImGui::SliderFloat("Quality", &quality, 0.0001f, 1.f, "%.4f", ImGuiSliderFlags_Logarithmic);
-        ImGui::SliderFloat("Quality", &quality, 0.f, 1.f, "%.4f");
+        ImGui::SliderFloat("Quality", &quality, 0.f, .1f, "%.4f");
         }
         else if (renderer == RENDERER_LAYER_SCALAR || renderer == RENDERER_LAYER_VECTOR || renderer == RENDERER_LAYER_DDA) {
           ImGui::SliderInt("Layer", &scalar_layer, 0, std::size(volume.info.layers) - 1);
