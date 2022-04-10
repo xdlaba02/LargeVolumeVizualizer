@@ -13,4 +13,4 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O3 -march=native -DNDEBUG -s")
 
 add_subdirectory(liblvf)
 add_subdirectory(tools)
-#add_subdirectory(extra)
+add_subdirectory(extra)

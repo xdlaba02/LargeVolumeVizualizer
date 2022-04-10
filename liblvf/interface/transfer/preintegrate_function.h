@@ -1,6 +1,6 @@
 #pragma once
 
-#include <components/texture2D/texture2D.h>
+#include "texture2D/texture2D.h"
 
 #include <cstdint>
 

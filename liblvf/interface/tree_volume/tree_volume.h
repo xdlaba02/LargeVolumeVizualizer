@@ -92,7 +92,7 @@ public:
     LE<T> min, max;
   };
 
-  TreeVolume(const char *blocks_file_name, const char *metadata_file_name, uint64_t width, uint64_t height, uint64_t depth):
+  TreeVolume(const char *blocks_file_name, const char *metadata_file_name, uint32_t width, uint32_t height, uint32_t depth):
       info(width, height, depth) {
 
     m_data_file.open(blocks_file_name, 0, info.size_in_blocks * BLOCK_BYTES, MappedFile::READ, MappedFile::SHARED);
