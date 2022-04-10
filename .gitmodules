@@ -1,12 +1,12 @@
 [submodule "external/glm"]
-	path = external/glm
+	path = liblvf/external/glm
 	url = git@github.com:g-truc/glm.git
 [submodule "external/glfw"]
-	path = external/glfw
+	path = tools/external/glfw
 	url = git@github.com:glfw/glfw.git
 [submodule "external/Vc"]
-	path = external/Vc
+	path = liblvf/external/Vc
 	url = git@github.com:VcDevel/Vc.git
 [submodule "external/imgui"]
-	path = external/imgui
+	path = tools/external/imgui/imgui
 	url = git@github.com:ocornut/imgui.git
