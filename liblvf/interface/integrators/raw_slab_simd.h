@@ -12,8 +12,8 @@
 
 #include <cstdint>
 
-template <typename T, typename TransferFunctionType>
-simd::vec4 integrate_raw_slab_simd(const RawVolume<T> &volume, const simd::Ray &ray, float step, float terminate_thresh, simd::float_m mask, const TransferFunctionType &transfer_function) {
+template <typename T, typename F>
+simd::vec4 integrate_raw_slab_simd(const RawVolume<T> &volume, const simd::Ray &ray, float step, float terminate_thresh, simd::float_m mask, const F &transfer_function) {
   simd::vec4 dst = {0.f, 0.f, 0.f, 1.f};
 
   simd::RayRange range = intersect_aabb_ray(ray, {0.f, 0.f, 0.f}, {1.f, 1.f, 1.f});

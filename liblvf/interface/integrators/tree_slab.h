@@ -15,8 +15,8 @@
 
 #include <array>
 
-template <typename T, typename TransferFunctionType, typename IntegratePredicate>
-glm::vec4 integrate_tree_slab(const TreeVolume<T> &volume, const Ray &ray, float step, float terminate_thresh, const TransferFunctionType &transfer_function, const IntegratePredicate &integrate_predicate) {
+template <typename T, uint32_t N, typename F, typename P>
+glm::vec4 integrate_tree_slab(const TreeVolume<T, N> &volume, const Ray &ray, float step, float terminate_thresh, const F &transfer_function, const P &integrate_predicate) {
   glm::vec4 dst(0.f, 0.f, 0.f, 1.f);
 
   RayRange range = intersect_aabb_ray(ray, {0.f, 0.f, 0.f}, { volume.info.width_frac, volume.info.height_frac, volume.info.depth_frac});
@@ -41,17 +41,17 @@ glm::vec4 integrate_tree_slab(const TreeVolume<T> &volume, const Ray &ray, float
 
       uint8_t layer_index = std::size(volume.info.layers) - 1 - layer;
 
-      glm::vec3 block = cell * exp2i(layer);
+      glm::vec3 node_pos = cell * exp2i(layer);
 
-      if (block.x >= volume.info.layers[layer_index].width_in_blocks
-      || (block.y >= volume.info.layers[layer_index].height_in_blocks)
-      || (block.z >= volume.info.layers[layer_index].depth_in_blocks)) {
+      if (node_pos.x >= volume.info.layers[layer_index].width_in_nodes
+      || (node_pos.y >= volume.info.layers[layer_index].height_in_nodes)
+      || (node_pos.z >= volume.info.layers[layer_index].depth_in_nodes)) {
         slab_range.min = range.max;
         slab_range.max = range.max;
         return false;
       }
 
-      const auto &node = volume.nodes[volume.info.node_handle(block[0], block[1], block[2], layer_index)];
+      const auto &node = volume.node(volume.info.node_handle(node_pos[0], node_pos[1], node_pos[2], layer_index));
 
       auto node_rgba = transfer_function(node.min, node.max);
 
@@ -82,9 +82,9 @@ glm::vec4 integrate_tree_slab(const TreeVolume<T> &volume, const Ray &ray, float
         while (slab_range.max < range.max) {
           glm::vec3 pos = ray.origin + ray.direction * slab_range.max;
 
-          glm::vec3 in_block = (pos - cell) * exp2i(layer) * float(TreeVolume<T>::SUBVOLUME_SIDE);
+          glm::vec3 in_block_pos = (pos - cell) * exp2i(layer) * float(TreeVolume<T, N>::SUBVOLUME_SIDE);
 
-          float slab_end_value = sample(volume, node.block_handle, in_block.x, in_block.y, in_block.z);
+          float slab_end_value = sample(volume, node.block_handle, in_block_pos.x, in_block_pos.y, in_block_pos.z);
 
           blend(transfer_function(slab_start_value, slab_end_value), dst, slab_range.max - slab_range.min);
 

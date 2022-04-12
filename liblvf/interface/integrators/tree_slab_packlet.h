@@ -16,8 +16,8 @@
 
 #include <array>
 
-template <typename T, typename TransferFunctionType, typename IntegratePredicate>
-Vec4Packlet integrate_tree_slab_packlet(const TreeVolume<T> &volume, const RayPacklet &ray, float step, float terminate_thresh, MaskPacklet mask, const TransferFunctionType &transfer_function, const IntegratePredicate &integrate_predicate) {
+template <typename T, uint32_t N, typename F, typename P>
+Vec4Packlet integrate_tree_slab_packlet(const TreeVolume<T, N> &volume, const RayPacklet &ray, float step, float terminate_thresh, MaskPacklet mask, const F &transfer_function, const P &integrate_predicate) {
   Vec4Packlet dst;
 
   using BlockHandlePacklet = std::array<std::array<uint64_t, simd::len>, simd::len>;
@@ -47,7 +47,7 @@ Vec4Packlet integrate_tree_slab_packlet(const TreeVolume<T> &volume, const RayPa
     ray_octree_traversal(ray, range, { }, 0, mask, [&](const RayRangePacklet &range, const Vec3Packlet &cell, uint8_t layer, MaskPacklet &mask) {
       uint8_t layer_index = std::size(volume.info.layers) - 1 - layer;
 
-      Vec3Packlet block;
+      Vec3Packlet node_pos;
 
       for (uint32_t j = 0; j < simd::len; j++) {
         if (mask[j].isEmpty()) {
@@ -67,11 +67,11 @@ Vec4Packlet integrate_tree_slab_packlet(const TreeVolume<T> &volume, const RayPa
           continue;
         }
 
-        block[j] = cell[j] * simd::float_v(exp2i(layer));
+        node_pos[j] = cell[j] * simd::float_v(exp2i(layer));
 
-        simd::float_m ray_outside = mask[j] && ((block[j].x >= volume.info.layers[layer_index].width_in_blocks)
-                                            || (block[j].y >= volume.info.layers[layer_index].height_in_blocks)
-                                            || (block[j].z >= volume.info.layers[layer_index].depth_in_blocks));
+        simd::float_m ray_outside = mask[j] && ((node_pos[j].x >= volume.info.layers[layer_index].width_in_nodes)
+                                            || (node_pos[j].y >= volume.info.layers[layer_index].height_in_nodes)
+                                            || (node_pos[j].z >= volume.info.layers[layer_index].depth_in_nodes));
 
         if (ray_outside.isNotEmpty()) {
           slab_range[j].min(ray_outside) = range[j].max;
@@ -89,10 +89,10 @@ Vec4Packlet integrate_tree_slab_packlet(const TreeVolume<T> &volume, const RayPa
 
         for (uint32_t k = 0; k < simd::len; k++) {
           if (mask[j][k]) {
-            uint64_t node_handle = volume.info.node_handle(block[j].x[k], block[j].y[k], block[j].z[k], layer_index);
-            node_min[k] = volume.nodes[node_handle].min;
-            node_max[k] = volume.nodes[node_handle].max;
-            block_handle[j][k] = volume.nodes[node_handle].block_handle;
+            uint64_t node_handle = volume.info.node_handle(node_pos[j].x[k], node_pos[j].y[k], node_pos[j].z[k], layer_index);
+            node_min[k] = volume.node(node_handle).min;
+            node_max[k] = volume.node(node_handle).max;
+            block_handle[j][k] = volume.node(node_handle).block_handle;
           }
         }
 
@@ -135,9 +135,9 @@ Vec4Packlet integrate_tree_slab_packlet(const TreeVolume<T> &volume, const RayPa
         for (integrate_mask[j] &= mask[j] & (slab_range[j].max < range[j].max); integrate_mask[j].isNotEmpty(); integrate_mask[j] &= slab_range[j].max < range[j].max) {
           simd::vec3 pos = ray[j].origin + ray[j].direction * slab_range[j].max;
 
-          simd::vec3 in_block = (pos - cell[j]) * simd::float_v(exp2i(layer)) * simd::float_v(TreeVolume<T>::SUBVOLUME_SIDE);
+          simd::vec3 in_block_pos = (pos - cell[j]) * simd::float_v(exp2i(layer)) * simd::float_v(TreeVolume<T, N>::SUBVOLUME_SIDE);
 
-          simd::float_v slab_end_value = sample(volume, block_handle[j], in_block.x, in_block.y, in_block.z, integrate_mask[j]);
+          simd::float_v slab_end_value = sample(volume, block_handle[j], in_block_pos.x, in_block_pos.y, in_block_pos.z, integrate_mask[j]);
 
           blend(transfer_function(slab_start_value[j], slab_end_value, integrate_mask[j]), dst[j], slab_range[j].max - slab_range[j].min, integrate_mask[j]);
 

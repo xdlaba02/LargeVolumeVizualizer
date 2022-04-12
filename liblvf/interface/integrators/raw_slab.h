@@ -13,8 +13,8 @@
 
 #include <cstdint>
 
-template <typename T, typename TransferFunctionType>
-glm::vec4 integrate_raw_slab(const RawVolume<T> &volume, const Ray &ray, float step, float terminate_thresh, const TransferFunctionType &transfer_function) {
+template <typename T, typename F>
+glm::vec4 integrate_raw_slab(const RawVolume<T> &volume, const Ray &ray, float step, float terminate_thresh, const F &transfer_function) {
   glm::vec4 dst(0.f, 0.f, 0.f, 1.f);
 
   RayRange range = intersect_aabb_ray(ray, {0.f, 0.f, 0.f}, {1.f, 1.f, 1.f});

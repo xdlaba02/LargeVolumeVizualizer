@@ -7,11 +7,12 @@
 #include <cstddef>
 
 #include <algorithm>
+#include <filesystem>
 
-template <typename T>
+template <typename T, uint32_t N>
 class TreeVolume {
 public:
-  static constexpr uint32_t BLOCK_BITS = 4;
+  static constexpr uint32_t BLOCK_BITS = N;
   static constexpr uint32_t BLOCK_SIDE = 1 << BLOCK_BITS;
   static constexpr uint32_t BLOCK_SIZE = BLOCK_SIDE * BLOCK_SIDE * BLOCK_SIDE;
   static constexpr uint32_t BLOCK_BYTES = BLOCK_SIZE * sizeof(T);
@@ -22,45 +23,45 @@ public:
   struct Info {
     struct Layer {
 
-      Layer(uint32_t width_in_blocks, uint32_t height_in_blocks, uint32_t depth_in_blocks):
-        width_in_blocks(width_in_blocks),
-        height_in_blocks(height_in_blocks),
-        depth_in_blocks(depth_in_blocks),
-        stride_in_blocks(width_in_blocks * height_in_blocks),
-        size_in_blocks(stride_in_blocks * depth_in_blocks) {}
+      Layer(uint32_t width_in_nodes, uint32_t height_in_nodes, uint32_t depth_in_nodes):
+        width_in_nodes(width_in_nodes),
+        height_in_nodes(height_in_nodes),
+        depth_in_nodes(depth_in_nodes),
+        stride_in_nodes(width_in_nodes * height_in_nodes),
+        size_in_nodes(stride_in_nodes * depth_in_nodes) {}
 
-      uint32_t width_in_blocks;
-      uint32_t height_in_blocks;
-      uint32_t depth_in_blocks;
+      uint32_t width_in_nodes;
+      uint32_t height_in_nodes;
+      uint32_t depth_in_nodes;
 
-      uint64_t stride_in_blocks;
-      uint64_t size_in_blocks;
+      uint64_t stride_in_nodes;
+      uint64_t size_in_nodes;
 
       inline uint64_t node_handle(uint32_t x, uint32_t y, uint32_t z) const {
-        return z * stride_in_blocks + y * width_in_blocks + x;
+        return z * stride_in_nodes + y * width_in_nodes + x;
       }
     };
 
     Info(uint32_t width, uint32_t height, uint32_t depth)
     {
-        size_in_blocks = 0;
+        size_in_nodes = 0;
 
-        uint32_t width_in_blocks  = (width  + SUBVOLUME_SIDE - 1) / SUBVOLUME_SIDE;
-        uint32_t height_in_blocks = (height + SUBVOLUME_SIDE - 1) / SUBVOLUME_SIDE;
-        uint32_t depth_in_blocks  = (depth  + SUBVOLUME_SIDE - 1) / SUBVOLUME_SIDE;
+        uint32_t width_in_nodes  = (width  + SUBVOLUME_SIDE - 1) / SUBVOLUME_SIDE;
+        uint32_t height_in_nodes = (height + SUBVOLUME_SIDE - 1) / SUBVOLUME_SIDE;
+        uint32_t depth_in_nodes  = (depth  + SUBVOLUME_SIDE - 1) / SUBVOLUME_SIDE;
 
-        while (width_in_blocks > 1 || height_in_blocks > 1 || depth_in_blocks > 1) {
-          layers.emplace_back(width_in_blocks, height_in_blocks, depth_in_blocks);
-          layer_offsets.push_back(size_in_blocks);
-          size_in_blocks += layers.back().size_in_blocks;
+        while (width_in_nodes > 1 || height_in_nodes > 1 || depth_in_nodes > 1) {
+          layers.emplace_back(width_in_nodes, height_in_nodes, depth_in_nodes);
+          layer_offsets.push_back(size_in_nodes);
+          size_in_nodes += layers.back().size_in_nodes;
 
-          ++width_in_blocks  >>= 1;
-          ++height_in_blocks >>= 1;
-          ++depth_in_blocks  >>= 1;
+          ++width_in_nodes  >>= 1;
+          ++height_in_nodes >>= 1;
+          ++depth_in_nodes  >>= 1;
         }
 
-        layers.emplace_back(width_in_blocks, height_in_blocks, depth_in_blocks);
-        layer_offsets.push_back(size_in_blocks);
+        layers.emplace_back(width_in_nodes, height_in_nodes, depth_in_nodes);
+        layer_offsets.push_back(size_in_nodes);
 
         float octree_size = (1 << (std::size(layers) - 1)) * SUBVOLUME_SIDE;
 
@@ -68,7 +69,7 @@ public:
         height_frac = height / octree_size;
         depth_frac = depth   / octree_size;
 
-        size_in_blocks += layers.back().size_in_blocks;
+        size_in_nodes += layers.back().size_in_nodes;
     }
 
     inline uint64_t node_handle(uint32_t x, uint32_t y, uint32_t z, uint8_t layer) const {
@@ -82,7 +83,7 @@ public:
     float height_frac;
     float depth_frac;
 
-    uint64_t size_in_blocks;
+    uint64_t size_in_nodes;
   };
 
   using Block = LE<T>[BLOCK_SIZE];
@@ -95,8 +96,19 @@ public:
   TreeVolume(const char *blocks_file_name, const char *metadata_file_name, uint32_t width, uint32_t height, uint32_t depth):
       info(width, height, depth) {
 
-    m_data_file.open(blocks_file_name, 0, info.size_in_blocks * BLOCK_BYTES, MappedFile::READ, MappedFile::SHARED);
-    m_metadata_file.open(metadata_file_name, 0, info.size_in_blocks * sizeof(Node), MappedFile::READ, MappedFile::SHARED);
+    size_t block_size = std::filesystem::file_size(blocks_file_name);
+    size_t metadata_size = std::filesystem::file_size(metadata_file_name);
+
+    if ((block_size % BLOCK_BYTES) || (block_size > info.size_in_nodes * BLOCK_BYTES)) {
+      throw std::runtime_error(std::string("Corrupted '") + blocks_file_name + "'!");
+    }
+
+    if (metadata_size != info.size_in_nodes * sizeof(Node)) {
+      throw std::runtime_error(std::string("Corrupted '") + metadata_file_name + "'!");
+    }
+
+    m_data_file.open(blocks_file_name, 0, block_size, MappedFile::READ, MappedFile::SHARED);
+    m_metadata_file.open(metadata_file_name, 0, metadata_size, MappedFile::READ, MappedFile::SHARED);
 
     if (!m_data_file) {
       throw std::runtime_error(std::string("Unable to map '") + blocks_file_name + "'!");
@@ -106,16 +118,19 @@ public:
       throw std::runtime_error(std::string("Unable to map '") + metadata_file_name + "'!");
     }
 
-    blocks  = reinterpret_cast<const Block *>(m_data_file.data());
-    nodes  = reinterpret_cast<const Node *>(m_metadata_file.data());
+    m_blocks = reinterpret_cast<const Block *>(m_data_file.data());
+    m_nodes  = reinterpret_cast<const Node *>(m_metadata_file.data());
   }
 
-public:
+  inline const Node &node(uint64_t node_handle) const { return m_nodes[node_handle]; }
+  inline const Block &block(uint64_t block_handle) const { return m_blocks[block_handle]; }
+
   const Info info;
-  const Block *blocks;
-  const Node *nodes;
 
 private:
+  const Block *m_blocks;
+  const Node *m_nodes;
+
   MappedFile m_data_file;
   MappedFile m_metadata_file;
 };

@@ -10,8 +10,8 @@
 
 #include <cstdint>
 
-template <typename T, typename TransferFunctionType>
-simd::vec4 integrate_tree_slab_layer_simd(const TreeVolume<T> &volume, const simd::Ray &ray, simd::float_m mask, uint8_t layer, float step, float terminate_thresh, const TransferFunctionType &transfer_function) {
+template <typename T, uint32_t N, typename F>
+simd::vec4 integrate_tree_slab_layer_simd(const TreeVolume<T, N> &volume, const simd::Ray &ray, simd::float_m mask, uint8_t layer, float step, float terminate_thresh, const F &transfer_function) {
   simd::vec4 dst(0.f, 0.f, 0.f, 1.f);
 
   simd::RayRange range = intersect_aabb_ray(ray, {0, 0, 0}, { volume.info.width_frac, volume.info.height_frac, volume.info.depth_frac});

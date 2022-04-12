@@ -1,8 +1,9 @@
 
-#include "sample.h"
-#include "integrate.h"
-#include "render.h"
 #include "timer.h"
+
+#include "dummy/sample.h"
+#include "dummy/integrate.h"
+#include "dummy/render.h"
 
 #include <ray/ray.h>
 #include <ray/ray_simd.h>
@@ -40,7 +41,7 @@ void generate_transforms(const F &func) {
   std::normal_distribution<float> normal {};
 
   for (uint64_t i = 0; i < n; i++) {
-    glm::vec3 origin = glm::normalize(glm::vec3(normal(re), normal(re), normal(re))) * 2.f;
+    glm::vec3 origin = glm::normalize(glm::vec3(normal(re), normal(re), normal(re)));
 
     static const glm::mat4 view = glm::lookAt(origin, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 
@@ -50,13 +51,11 @@ void generate_transforms(const F &func) {
 
 template <typename F>
 double test_scalar(const F &func) {
-  static float dummy __attribute__((used)) {};
-
   return measure_ns([&]{
     generate_transforms([&](const glm::mat4 &vm) {
       render_scalar(viewport_width, viewport_height, viewport_fov, vm, [&](const Ray &ray) {
         integrate_scalar(ray, step, [&](const glm::vec3 &pos) {
-          dummy += func(pos);
+          func(pos);
         });
       });
     });
@@ -65,13 +64,11 @@ double test_scalar(const F &func) {
 
 template <typename F>
 double test_simd(const F &func) {
-  static simd::float_v dummy __attribute__((used)) {};
-
   return measure_ns([&]{
     generate_transforms([&](const glm::mat4 &vm) {
       render_simd(viewport_width, viewport_height, viewport_fov, vm, [&](const simd::Ray &ray, const simd::float_m &mask) {
         integrate_simd(ray, step, mask, [&](const simd::vec3 &pos, const simd::float_m &mask) {
-          dummy += func(pos, mask);
+          func(pos, mask);
         });
       });
     });
@@ -80,13 +77,11 @@ double test_simd(const F &func) {
 
 template <typename F>
 double test_packlet(const F &func) {
-  static simd::float_v dummy __attribute__((used)) {};
-
   return measure_ns([&]{
     generate_transforms([&](const glm::mat4 &vm) {
       render_packlet(viewport_width, viewport_height, viewport_fov, vm, [&](const RayPacklet &ray, const MaskPacklet &mask) {
         integrate_packlet(ray, step, mask, [&](const simd::vec3 &pos, const simd::float_m &mask) {
-          dummy += func(pos, mask);
+          func(pos, mask);
         });
       });
     });

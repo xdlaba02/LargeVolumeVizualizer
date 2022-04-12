@@ -17,11 +17,8 @@
 #include <array>
 #include <concepts>
 
-template <typename F>
-concept TransferFunction = std::invocable<F, const simd::float_v &, const simd::float_v &, simd::float_m>;
-
-template <typename T, TransferFunction TransferFunctionType, typename IntegratePredicate>
-simd::vec4 integrate_tree_slab_simd(const TreeVolume<T> &volume, const simd::Ray &ray, float step, float terminate_thresh, simd::float_m mask, const TransferFunctionType &transfer_function, const IntegratePredicate &integrate_predicate) {
+template <typename T, uint32_t N, typename F, typename P>
+simd::vec4 integrate_tree_slab_simd(const TreeVolume<T, N> &volume, const simd::Ray &ray, float step, float terminate_thresh, simd::float_m mask, const F &transfer_function, const P &integrate_predicate) {
   simd::vec4 dst = {0.f, 0.f, 0.f, 1.f};
 
   simd::RayRange range = intersect_aabb_ray(ray, {0.f, 0.f, 0.f}, { volume.info.width_frac, volume.info.height_frac, volume.info.depth_frac});
@@ -48,11 +45,11 @@ simd::vec4 integrate_tree_slab_simd(const TreeVolume<T> &volume, const simd::Ray
         return;
       }
 
-      simd::vec3 block = cell * simd::float_v(exp2i(layer));
+      simd::vec3 node_pos = cell * simd::float_v(exp2i(layer));
 
-      simd::float_m ray_outside = mask && ((block.x >= volume.info.layers[layer_index].width_in_blocks)
-                                       || (block.y >= volume.info.layers[layer_index].height_in_blocks)
-                                       || (block.z >= volume.info.layers[layer_index].depth_in_blocks));
+      simd::float_m ray_outside = mask && ((node_pos.x >= volume.info.layers[layer_index].width_in_nodes)
+                                       || (node_pos.y >= volume.info.layers[layer_index].height_in_nodes)
+                                       || (node_pos.z >= volume.info.layers[layer_index].depth_in_nodes));
 
       if (ray_outside.isNotEmpty()) {
         slab_range.min(ray_outside) = range.max;
@@ -71,10 +68,10 @@ simd::vec4 integrate_tree_slab_simd(const TreeVolume<T> &volume, const simd::Ray
 
       for (uint32_t k = 0; k < simd::len; k++) {
         if (mask[k]) {
-          uint64_t node_handle = volume.info.node_handle(block[0][k], block[1][k], block[2][k], layer_index);
-          node_min[k] = volume.nodes[node_handle].min;
-          node_max[k] = volume.nodes[node_handle].max;
-          block_handle[k] = volume.nodes[node_handle].block_handle;
+          uint64_t node_handle = volume.info.node_handle(node_pos[0][k], node_pos[1][k], node_pos[2][k], layer_index);
+          node_min[k] = volume.node(node_handle).min;
+          node_max[k] = volume.node(node_handle).max;
+          block_handle[k] = volume.node(node_handle).block_handle;
         }
       }
 
@@ -114,9 +111,9 @@ simd::vec4 integrate_tree_slab_simd(const TreeVolume<T> &volume, const simd::Ray
       for (simd::float_m integrate_mask = mask & integrate_predicate(cell, layer, mask) & slab_range.max < range.max; integrate_mask.isNotEmpty(); integrate_mask &= slab_range.max < range.max) {
         simd::vec3 pos = ray.origin + ray.direction * slab_range.max;
 
-        simd::vec3 in_block = (pos - cell) * simd::float_v(exp2i(layer)) * simd::float_v(TreeVolume<T>::SUBVOLUME_SIDE);
+        simd::vec3 in_block_pos = (pos - cell) * simd::float_v(exp2i(layer)) * simd::float_v(TreeVolume<T, N>::SUBVOLUME_SIDE);
 
-        simd::float_v slab_end_value = sample(volume, block_handle, in_block.x, in_block.y, in_block.z, integrate_mask);
+        simd::float_v slab_end_value = sample(volume, block_handle, in_block_pos.x, in_block_pos.y, in_block_pos.z, integrate_mask);
 
         blend(transfer_function(slab_start_value, slab_end_value, integrate_mask), dst, slab_range.max - slab_range.min, integrate_mask);
 

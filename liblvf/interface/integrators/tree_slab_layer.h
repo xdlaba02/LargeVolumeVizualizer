@@ -10,8 +10,8 @@
 
 #include <cstdint>
 
-template <typename T, typename TransferFunctionType>
-glm::vec4 integrate_tree_slab_layer(const TreeVolume<T> &volume, const Ray &ray, uint8_t layer, float step, float terminate_thresh, const TransferFunctionType &transfer_function) {
+template <typename T, uint32_t N, typename F>
+glm::vec4 integrate_tree_slab_layer(const TreeVolume<T, N> &volume, const Ray &ray, uint8_t layer, float step, float terminate_thresh, const F &transfer_function) {
   glm::vec4 dst(0.f, 0.f, 0.f, 1.f);
 
   RayRange range = intersect_aabb_ray(ray, {0, 0, 0}, { volume.info.width_frac, volume.info.height_frac, volume.info.depth_frac});

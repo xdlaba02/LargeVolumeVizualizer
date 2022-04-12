@@ -1,4 +1,3 @@
-
 #include <tree_volume/tree_volume.h>
 
 #include <utils/mapped_file.h>
@@ -25,7 +24,7 @@ int main(int argc, char *argv[]) {
     dstream >> depth;
   }
 
-  TreeVolume<uint8_t>::Info info(width, height, depth);
+  TreeVolume<uint8_t, 4>::Info info(width, height, depth);
 
   {
     std::ofstream metadata(argv[4], std::ios::binary);
@@ -33,16 +32,16 @@ int main(int argc, char *argv[]) {
       throw std::runtime_error(std::string("Unable to open '") + argv[6] + "'!");
     }
 
-    metadata.seekp(info.size_in_blocks * sizeof(TreeVolume<uint8_t>::Node) - 1);
+    metadata.seekp(info.size_in_nodes * sizeof(TreeVolume<uint8_t, 4>::Node) - 1);
     metadata.write("", 1);
   }
 
-  MappedFile metadata(argv[4], 0, info.size_in_blocks * sizeof(TreeVolume<uint8_t>::Node), MappedFile::WRITE, MappedFile::SHARED);
+  MappedFile metadata(argv[4], 0, info.size_in_nodes * sizeof(TreeVolume<uint8_t, 4>::Node), MappedFile::WRITE, MappedFile::SHARED);
   if (!metadata) {
     throw std::runtime_error(std::string("Unable to map '") + argv[6] + "'!");
   }
 
-  TreeVolume<uint8_t>::Node *nodes = reinterpret_cast<TreeVolume<uint8_t>::Node *>(metadata.data());
+  TreeVolume<uint8_t, 4>::Node *nodes = reinterpret_cast<TreeVolume<uint8_t, 4>::Node *>(metadata.data());
 
   std::ofstream tree_volume(argv[5], std::ofstream::binary);
   if (!tree_volume) {
@@ -55,25 +54,24 @@ int main(int argc, char *argv[]) {
     uint8_t layer = std::size(info.layers) - layer_index - 1;
 
     std::cerr << "layer_index: " << (int)layer_index << "\n";
-    std::cerr << info.layers[layer_index].width_in_blocks << " " << info.layers[layer_index].height_in_blocks << " " << info.layers[layer_index].depth_in_blocks << "\n";
+    std::cerr << info.layers[layer_index].width_in_nodes << " " << info.layers[layer_index].height_in_nodes << " " << info.layers[layer_index].depth_in_nodes << "\n";
     #pragma omp parallel for
-    for (uint32_t block_z = 0; block_z < info.layers[layer_index].depth_in_blocks; block_z++) {
-      for (uint32_t block_y = 0; block_y < info.layers[layer_index].height_in_blocks; block_y++) {
-        for (uint32_t block_x = 0; block_x < info.layers[layer_index].width_in_blocks; block_x++) {
+    for (uint32_t node_z = 0; node_z < info.layers[layer_index].depth_in_nodes; node_z++) {
+      for (uint32_t node_y = 0; node_y < info.layers[layer_index].height_in_nodes; node_y++) {
+        for (uint32_t node_x = 0; node_x < info.layers[layer_index].width_in_nodes; node_x++) {
 
-          TreeVolume<uint8_t>::Node &node = nodes[info.node_handle(block_x, block_y, block_z, layer_index)];
+          TreeVolume<uint8_t, 4>::Node &node = nodes[info.node_handle(node_x, node_y, node_z, layer_index)];
 
           node.block_handle = 0;
           node.min    = 255;
           node.max    = 0;
 
-          TreeVolume<uint8_t>::Block block {};
+          TreeVolume<uint8_t, 4>::Block block {};
 
+          uint32_t node_val = layer * 2 + ((node_x & 1) ^ (node_y & 1) ^ (node_z & 1));
 
-          uint32_t block_val = layer * 2 + ((block_x & 1) ^ (block_y & 1) ^ (block_z & 1));
-
-          for (uint32_t i = 0; i < TreeVolume<uint8_t>::BLOCK_SIZE; i++) {
-            block[i] = block_val;
+          for (uint32_t i = 0; i < TreeVolume<uint8_t, 4>::BLOCK_SIZE; i++) {
+            block[i] = node_val;
           }
 
           #pragma omp critical

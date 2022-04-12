@@ -13,8 +13,8 @@
 
 #include <cstdint>
 
-template <typename T, typename TransferFunctionType>
-glm::vec4 integrate_tree_slab_layer_dda(const TreeVolume<T> &volume, const Ray &ray, uint8_t layer, float step, float terminate_thresh, const TransferFunctionType &transfer_function) {
+template <typename T, uint32_t N, typename F>
+glm::vec4 integrate_tree_slab_layer_dda(const TreeVolume<T, N> &volume, const Ray &ray, uint8_t layer, float step, float terminate_thresh, const F &transfer_function) {
   glm::vec4 dst(0.f, 0.f, 0.f, 1.f);
 
   RayRange range = intersect_aabb_ray(ray, {0.f, 0.f, 0.f}, { volume.info.width_frac, volume.info.height_frac, volume.info.depth_frac});
@@ -28,7 +28,7 @@ glm::vec4 integrate_tree_slab_layer_dda(const TreeVolume<T> &volume, const Ray &
 
     Ray scaled_ray { ray.origin * exp2i(layer), ray.direction * exp2i(layer), 1.f / (ray.direction * exp2i(layer)) };
 
-    ray_raster_traversal(scaled_ray, range, [&](const RayRange &range, const glm::vec<3, uint32_t> &block) {
+    ray_raster_traversal(scaled_ray, range, [&](const RayRange &range, const glm::vec<3, uint32_t> &node_pos) {
 
       // Early ray termination
       if (dst.a < terminate_thresh) {
@@ -40,15 +40,15 @@ glm::vec4 integrate_tree_slab_layer_dda(const TreeVolume<T> &volume, const Ray &
         return true;
       }
 
-      if (block.x >= volume.info.layers[layer_index].width_in_blocks
-      ||  block.y >= volume.info.layers[layer_index].height_in_blocks
-      ||  block.z >= volume.info.layers[layer_index].depth_in_blocks) {
+      if (node_pos.x >= volume.info.layers[layer_index].width_in_nodes
+      ||  node_pos.y >= volume.info.layers[layer_index].height_in_nodes
+      ||  node_pos.z >= volume.info.layers[layer_index].depth_in_nodes) {
         slab_range.min = range.max;
         slab_range.max = range.max;
         return true;
       }
 
-      const auto &node = volume.nodes[volume.info.node_handle(block.x, block.y, block.z, layer_index)];
+      const auto &node = volume.node(volume.info.node_handle(node_pos.x, node_pos.y, node_pos.z, layer_index));
 
       auto node_rgba = transfer_function(node.min, node.max);
 
@@ -78,9 +78,9 @@ glm::vec4 integrate_tree_slab_layer_dda(const TreeVolume<T> &volume, const Ray &
       while (slab_range.max < range.max) {
         glm::vec3 pos = scaled_ray.origin + scaled_ray.direction * slab_range.max;
 
-        glm::vec3 in_block = (pos - glm::vec3(block)) * float(TreeVolume<T>::SUBVOLUME_SIDE);
+        glm::vec3 in_block_pos = (pos - glm::vec3(node_pos)) * float(TreeVolume<T, N>::SUBVOLUME_SIDE);
 
-        float slab_end_value = sample(volume, node.block_handle, in_block.x, in_block.y, in_block.z);
+        float slab_end_value = sample(volume, node.block_handle, in_block_pos.x, in_block_pos.y, in_block_pos.z);
 
         glm::vec4 src = transfer_function(slab_start_value, slab_end_value);
 

@@ -10,3 +10,5 @@ add_executable(test_volume_generator  test_volume_generator.cc)
 target_link_libraries(blocked_integration_test Vc glm lvf)
 target_link_libraries(naive_integration_test   Vc glm lvf)
 target_link_libraries(test_volume_generator    lvf)
+
+add_subdirectory(experiments)

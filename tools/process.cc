@@ -9,14 +9,14 @@
 #include <vector>
 #include <cmath>
 
-void parse_args(int argc, const char *argv[], const char *&raw_volume, const char *&processed_volume, const char *&processed_metadata, uint32_t &width, uint32_t &height, uint32_t &depth) {
-  if (argc != 7) {
+void parse_args(int argc, const char *argv[], const char *&raw_volume, const char *&processed_volume, const char *&processed_metadata, uint32_t &width, uint32_t &height, uint32_t &depth, uint32_t &bytes_per_voxel) {
+  if (argc != 8) {
     throw std::runtime_error("Wrong number of arguments!");
   }
 
   raw_volume         = argv[1];
-  processed_volume   = argv[5];
-  processed_metadata = argv[6];
+  processed_volume   = argv[6];
+  processed_metadata = argv[7];
 
   {
     std::stringstream arg {};
@@ -44,6 +44,15 @@ void parse_args(int argc, const char *argv[], const char *&raw_volume, const cha
       throw std::runtime_error("Unable to parse depth!");
     }
   }
+
+  {
+    std::stringstream arg {};
+    arg << argv[5];
+    arg >> bytes_per_voxel;
+    if (!arg) {
+      throw std::runtime_error("Unable to parse bytes per voxel!");
+    }
+  }
 }
 
 int main(int argc, const char *argv[]) {
@@ -51,22 +60,36 @@ int main(int argc, const char *argv[]) {
     uint32_t width;
     uint32_t height;
     uint32_t depth;
+    uint32_t bytes_per_voxel;
 
     const char *raw_volume_file_name;
     const char *processed_volume_file_name;
     const char *metadata_file_name;
 
-    parse_args(argc, argv, raw_volume_file_name, processed_volume_file_name, metadata_file_name, width, height, depth);
+    parse_args(argc, argv, raw_volume_file_name, processed_volume_file_name, metadata_file_name, width, height, depth, bytes_per_voxel);
 
-    RawVolume<uint8_t> volume(raw_volume_file_name, width, height, depth);
+    if (bytes_per_voxel == 1) {
+      RawVolume<uint8_t> volume(raw_volume_file_name, width, height, depth);
 
-    process_volume<uint8_t>(width, height, depth, processed_volume_file_name, metadata_file_name, [&](uint32_t x, uint32_t y, uint32_t z) {
-      return volume.data[volume.voxel_handle(x, y, z)];
-    });
+      process_volume<uint8_t, 4>(width, height, depth, processed_volume_file_name, metadata_file_name, [&](uint32_t x, uint32_t y, uint32_t z) {
+        return volume.data[volume.voxel_handle(x, y, z)];
+      });
+    }
+    else if (bytes_per_voxel == 2) {
+      RawVolume<uint16_t> volume(raw_volume_file_name, width, height, depth);
+
+      process_volume<uint16_t, 4>(width, height, depth, processed_volume_file_name, metadata_file_name, [&](uint32_t x, uint32_t y, uint32_t z) {
+        return volume.data[volume.voxel_handle(x, y, z)];
+      });
+    }
+    else {
+      throw std::runtime_error("Only one or two bytes per voxel!");
+    }
+
   }
   catch (const std::runtime_error& e) {
     std::cerr << e.what() << "\n";
     std::cerr << "Usage: \n";
-    std::cerr << argv[0] << " <raw-volume> <width> <height> <depth> <processed-volume> <processed-metadata>\n";
+    std::cerr << argv[0] << " <raw-volume> <width> <height> <depth> <bytes-per-voxel> <processed-volume> <processed-metadata>\n";
   }
 }
