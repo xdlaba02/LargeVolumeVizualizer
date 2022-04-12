@@ -3,8 +3,8 @@
 #include <tree_volume/tree_volume.h>
 #include <tree_volume/sampler_simd.h>
 
-#include <components/ray/ray_simd.h>
-#include <components/ray/intersection_simd.h>
+#include <ray/ray_simd.h>
+#include <ray/intersection_simd.h>
 
 #include <glm/glm.hpp>
 

@@ -60,7 +60,7 @@ int main(int argc, const char *argv[]) {
 
     RawVolume<uint8_t> volume(raw_volume_file_name, width, height, depth);
 
-    process_volume(processed_volume_file_name, metadata_file_name, width, height, depth, [&](uint32_t x, uint32_t y, uint32_t z) {
+    process_volume<uint8_t>(width, height, depth, processed_volume_file_name, metadata_file_name, [&](uint32_t x, uint32_t y, uint32_t z) {
       return volume.data[volume.voxel_handle(x, y, z)];
     });
   }

@@ -2,7 +2,7 @@
 
 #include "raw_volume.h"
 
-#include <components/linear_interpolation.h>
+#include <utils/linear_interpolation.h>
 
 template <typename T>
 inline float sample(const RawVolume<T> &volume, float x, float y, float z) {

@@ -2,7 +2,7 @@
 
 #include "ray.h"
 
-#include <components/fast_exp2.h>
+#include <utils/fast_exp2.h>
 
 #include <glm/glm.hpp>
 

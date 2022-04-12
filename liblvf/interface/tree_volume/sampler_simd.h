@@ -2,10 +2,10 @@
 
 #include "tree_volume.h"
 
-#include <components/morton.h>
-#include <components/linear_interpolation.h>
-#include <components/fast_exp2.h>
-#include <components/simd.h>
+#include <utils/morton.h>
+#include <utils/linear_interpolation.h>
+#include <utils/fast_exp2.h>
+#include <utils/simd.h>
 
 // expects coordinates from interval <-.5f, TreeVolume<T>::SUBVOLUME_SIDE - .5f>
 // can safely handle values from interval (-1.f, TreeVolume<T>::SUBVOLUME_SIDE) due to padding and truncation used

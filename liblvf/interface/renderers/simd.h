@@ -1,9 +1,9 @@
 #pragma once
 
-#include <components/ray_generator.h>
+#include <utils/ray_generator.h>
 
-#include <components/simd.h>
-#include <components/glm_simd.h>
+#include <utils/simd.h>
+#include <utils/glm_simd.h>
 
 template <typename F>
 void render_simd(uint32_t width, uint32_t height, float fov, const glm::mat4 &vmt, uint8_t *rgb_buffer, const F &integrator) {

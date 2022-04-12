@@ -1,6 +1,6 @@
 #pragma once
 
-#include <components/glm_simd.h>
+#include <utils/glm_simd.h>
 
 void blend(const simd::vec4 &src, simd::vec4 &dst, simd::float_v stepsize, const simd::float_m &mask) {
   simd::float_v alpha = exp(-src.a * stepsize);

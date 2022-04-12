@@ -1,6 +1,6 @@
 #pragma once
 
-#include <components/glm_simd.h>
+#include <utils/glm_simd.h>
 
 namespace simd {
   struct Ray {

@@ -4,14 +4,14 @@
 #include "render.h"
 #include "timer.h"
 
-#include <components/ray/ray.h>
-#include <components/ray/ray_simd.h>
-#include <components/ray/intersection.h>
-#include <components/ray/intersection_simd.h>
+#include <ray/ray.h>
+#include <ray/ray_simd.h>
+#include <ray/intersection.h>
+#include <ray/intersection_simd.h>
 
-#include <components/mapped_file.h>
-#include <components/ray_generator.h>
-#include <components/mapped_file.h>
+#include <utils/mapped_file.h>
+#include <utils/ray_generator.h>
+#include <utils/mapped_file.h>
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>

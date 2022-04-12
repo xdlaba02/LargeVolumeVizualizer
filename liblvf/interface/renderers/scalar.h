@@ -1,6 +1,6 @@
 #pragma once
 
-#include <components/ray_generator.h>
+#include <utils/ray_generator.h>
 
 #include <glm/glm.hpp>
 

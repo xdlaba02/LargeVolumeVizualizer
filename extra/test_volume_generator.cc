@@ -1,9 +1,9 @@
 
 #include <tree_volume/tree_volume.h>
 
-#include <components/mapped_file.h>
-#include <components/morton.h>
-#include <components/endian.h>
+#include <utils/mapped_file.h>
+#include <utils/morton.h>
+#include <utils/endian.h>
 
 #include <iostream>
 #include <fstream>

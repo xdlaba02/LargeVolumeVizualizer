@@ -1,8 +1,8 @@
 #pragma once
 
-#include <components/ray_generator.h>
+#include <utils/ray_generator.h>
 
-#include <components/ray/traversal_octree_packlet.h>
+#include <ray/traversal_octree_packlet.h>
 
 template <typename F>
 void render_packlet(uint32_t width, uint32_t height, float fov, const glm::mat4 &vmt, uint8_t *rgb_buffer, const F &integrator) {

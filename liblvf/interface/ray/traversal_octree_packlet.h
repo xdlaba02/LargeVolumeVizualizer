@@ -2,8 +2,8 @@
 
 #include "ray_simd.h"
 
-#include <components/fast_exp2.h>
-#include <components/simd.h>
+#include <utils/fast_exp2.h>
+#include <utils/simd.h>
 
 #include <glm/glm.hpp>
 

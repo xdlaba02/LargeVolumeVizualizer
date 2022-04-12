@@ -1,7 +1,7 @@
 #pragma once
 
-#include <components/mapped_file.h>
-#include <components/endian.h>
+#include <utils/mapped_file.h>
+#include <utils/endian.h>
 
 #include <cstdint>
 
@@ -10,7 +10,7 @@
 template <typename T>
 class RawVolume {
 public:
-  RawVolume(const char *file_name, uint64_t width, uint64_t height, uint64_t depth):
+  RawVolume(const char *file_name, uint32_t width, uint32_t height, uint32_t depth):
       width(width),
       height(height),
       depth(depth),

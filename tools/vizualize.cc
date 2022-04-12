@@ -112,7 +112,7 @@ int main(int argc, const char *argv[]) {
       };
     };
 
-    GLFW::Window window(640, 480, "Volumetric Vizualizer");
+    GLFW::Window window(1920, 1080, "Volumetric Vizualizer");
 
     std::vector<uint8_t> raster(window.width() * window.height() * 3);
 
@@ -126,7 +126,7 @@ int main(int argc, const char *argv[]) {
 
     // Tree volume renderes expects the ray intersecting from (0 .. 1), but the interval the volume is in is in range (0 .. volume.info.frac*) due to the layers being power of two sizes.
     // We need to adjust the transformation by this fraction.
-    const glm::vec3 volume_frac     = glm::vec3(volume.info.width_frac, volume.info.height_frac, volume.info.depth_frac);
+    const glm::vec3 volume_frac = glm::vec3(volume.info.width_frac, volume.info.height_frac, volume.info.depth_frac);
 
     glm::vec3 volume_scale    = glm::vec3(1.0f, 1.0f, 1.0f);
     glm::vec3 volume_pos      = glm::vec3(0.0f, 0.0f, 0.0f);
@@ -137,7 +137,7 @@ int main(int argc, const char *argv[]) {
     float step = 0.001f;
     float quality = 0.01f;
     float fov = 45.f;
-    int scalar_layer = 0;
+    int layer_renderer_layer = 0;
     float terminate_thresh = 0.01f;
 
     enum: int {
@@ -249,7 +249,7 @@ int main(int argc, const char *argv[]) {
           ImGui::SliderFloat("Quality", &quality, 0.f, .1f, "%.4f");
           }
           else if (renderer == RENDERER_LAYER_SCALAR || renderer == RENDERER_LAYER_VECTOR || renderer == RENDERER_LAYER_DDA) {
-            ImGui::SliderInt("Layer", &scalar_layer, 0, std::size(volume.info.layers) - 1);
+            ImGui::SliderInt("Layer", &layer_renderer_layer, 0, std::size(volume.info.layers) - 1);
           }
           ImGui::TreePop();
         }
@@ -311,19 +311,19 @@ int main(int argc, const char *argv[]) {
       switch (renderer) {
         case RENDERER_LAYER_DDA:
           render_scalar(window.width(), window.height(), fov, vmt, raster.data(), [&](const Ray &ray) {
-            return integrate_tree_slab_layer_dda(volume, ray, scalar_layer, step, terminate_thresh, transfer_function_scalar);
+            return integrate_tree_slab_layer_dda(volume, ray, layer_renderer_layer, step, terminate_thresh, transfer_function_scalar);
           });
         break;
 
         case RENDERER_LAYER_SCALAR:
           render_scalar(window.width(), window.height(), fov, vmt, raster.data(), [&](const Ray &ray) {
-            return integrate_tree_slab_layer(volume, ray, scalar_layer, step, terminate_thresh, transfer_function_scalar);
+            return integrate_tree_slab_layer(volume, ray, layer_renderer_layer, step, terminate_thresh, transfer_function_scalar);
           });
         break;
 
         case RENDERER_LAYER_VECTOR:
           render_simd(window.width(), window.height(), fov, vmt, raster.data(), [&](const simd::Ray &ray, const simd::float_m &mask) {
-            return integrate_tree_slab_layer_simd(volume, ray, mask, scalar_layer, step, terminate_thresh, transfer_function_vector);
+            return integrate_tree_slab_layer_simd(volume, ray, mask, layer_renderer_layer, step, terminate_thresh, transfer_function_vector);
           });
         break;
 

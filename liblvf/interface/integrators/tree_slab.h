@@ -3,11 +3,11 @@
 #include <tree_volume/tree_volume.h>
 #include <tree_volume/sampler.h>
 
-#include <components/ray/traversal_octree.h>
-#include <components/ray/intersection.h>
+#include <ray/traversal_octree.h>
+#include <ray/intersection.h>
 
-#include <components/fast_exp2.h>
-#include <components/blend.h>
+#include <utils/fast_exp2.h>
+#include <utils/blend.h>
 
 #include <glm/glm.hpp>
 

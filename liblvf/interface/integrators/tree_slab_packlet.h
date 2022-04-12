@@ -3,12 +3,12 @@
 #include <tree_volume/tree_volume.h>
 #include <tree_volume/sampler_simd.h>
 
-#include <components/ray/traversal_octree_packlet.h>
-#include <components/ray/intersection.h>
+#include <ray/traversal_octree_packlet.h>
+#include <ray/intersection.h>
 
-#include <components/fast_exp2.h>
-#include <components/simd.h>
-#include <components/blend_simd.h>
+#include <utils/fast_exp2.h>
+#include <utils/simd.h>
+#include <utils/blend_simd.h>
 
 #include <glm/glm.hpp>
 

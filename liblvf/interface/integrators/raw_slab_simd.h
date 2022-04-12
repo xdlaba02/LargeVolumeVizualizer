@@ -3,10 +3,10 @@
 #include <raw_volume/raw_volume.h>
 #include <raw_volume/sampler_simd.h>
 
-#include <components/ray/intersection_simd.h>
-#include <components/ray/ray_simd.h>
+#include <ray/intersection_simd.h>
+#include <ray/ray_simd.h>
 
-#include <components/blend_simd.h>
+#include <utils/blend_simd.h>
 
 #include <glm/glm.hpp>
 

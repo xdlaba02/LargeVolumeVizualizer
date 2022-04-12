@@ -1,10 +1,10 @@
 #pragma once
 
-#include <components/ray/ray.h>
-#include <components/ray/ray_simd.h>
-#include <components/ray/intersection.h>
-#include <components/ray/intersection_simd.h>
-#include <components/ray/traversal_octree_packlet.h>
+#include <ray/ray.h>
+#include <ray/ray_simd.h>
+#include <ray/intersection.h>
+#include <ray/intersection_simd.h>
+#include <ray/traversal_octree_packlet.h>
 
 template <typename F>
 void integrate_scalar(const Ray &ray, float step, const F &func) {

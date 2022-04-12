@@ -1,10 +1,10 @@
 #pragma once
 
-#include <components/ray/traversal_octree_packlet.h>
+#include <ray/traversal_octree_packlet.h>
 
-#include <components/ray_generator.h>
-#include <components/simd.h>
-#include <components/glm_simd.h>
+#include <utils/ray_generator.h>
+#include <utils/simd.h>
+#include <utils/glm_simd.h>
 
 #include <glm/glm.hpp>
 

@@ -3,8 +3,8 @@
 #include <tree_volume/tree_volume.h>
 #include <tree_volume/sampler.h>
 
-#include <components/ray/intersection.h>
-#include <components/ray/ray.h>
+#include <ray/intersection.h>
+#include <ray/ray.h>
 
 #include <glm/glm.hpp>
 

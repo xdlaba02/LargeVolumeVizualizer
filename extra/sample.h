@@ -1,7 +1,7 @@
 #pragma once
 
-#include <components/morton.h>
-#include <components/simd.h>
+#include <utils/morton.h>
+#include <utils/simd.h>
 
 #include <cstdint>
 #include <cstddef>

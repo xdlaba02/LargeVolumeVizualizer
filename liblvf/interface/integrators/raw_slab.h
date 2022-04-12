@@ -3,11 +3,11 @@
 #include <raw_volume/raw_volume.h>
 #include <raw_volume/sampler.h>
 
-#include <components/ray/intersection.h>
-#include <components/ray/ray.h>
+#include <ray/intersection.h>
+#include <ray/ray.h>
 
-#include <components/fast_exp2.h>
-#include <components/blend.h>
+#include <utils/fast_exp2.h>
+#include <utils/blend.h>
 
 #include <glm/glm.hpp>
 

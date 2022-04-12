@@ -2,7 +2,7 @@
 
 #include "texture2D.h"
 
-#include <components/glm_simd.h>
+#include <utils/glm_simd.h>
 
 #include <cstdint>
 
