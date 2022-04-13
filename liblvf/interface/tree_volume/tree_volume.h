@@ -27,7 +27,7 @@ public:
         width_in_nodes(width_in_nodes),
         height_in_nodes(height_in_nodes),
         depth_in_nodes(depth_in_nodes),
-        stride_in_nodes(width_in_nodes * height_in_nodes),
+        stride_in_nodes(static_cast<uint64_t>(width_in_nodes) * height_in_nodes),
         size_in_nodes(stride_in_nodes * depth_in_nodes) {}
 
       uint32_t width_in_nodes;
@@ -98,14 +98,6 @@ public:
 
     size_t block_size = std::filesystem::file_size(blocks_file_name);
     size_t metadata_size = std::filesystem::file_size(metadata_file_name);
-
-    if ((block_size % BLOCK_BYTES) || (block_size > info.size_in_nodes * BLOCK_BYTES)) {
-      throw std::runtime_error(std::string("Corrupted '") + blocks_file_name + "'!");
-    }
-
-    if (metadata_size != info.size_in_nodes * sizeof(Node)) {
-      throw std::runtime_error(std::string("Corrupted '") + metadata_file_name + "'!");
-    }
 
     m_data_file.open(blocks_file_name, 0, block_size, MappedFile::READ, MappedFile::SHARED);
     m_metadata_file.open(metadata_file_name, 0, metadata_size, MappedFile::READ, MappedFile::SHARED);

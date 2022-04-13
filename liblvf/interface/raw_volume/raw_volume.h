@@ -14,8 +14,8 @@ public:
       width(width),
       height(height),
       depth(depth),
-      stride(width * height),
-      size(width * height * depth),
+      stride(static_cast<uint64_t>(width) * height),
+      size(stride * depth),
       m_file(file_name, 0, size * sizeof(T), MappedFile::READ, MappedFile::SHARED)
   {
     if (!m_file) {

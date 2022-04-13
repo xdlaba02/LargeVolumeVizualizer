@@ -5,6 +5,7 @@
 #include "../dummy/sample.h"
 
 #include <raw_volume/raw_volume.h>
+#include <tree_volume/processor.h>
 #include <tree_volume/tree_volume.h>
 
 #include <ray/ray.h>
@@ -122,7 +123,9 @@ void test_packlet(const F &func) {
 }
 
 template <typename T>
-void test_raw(const RawVolume<T> &volume) {
+void test_raw(const char *raw_volume_file_name, uint32_t width, uint32_t height, uint32_t depth) {
+  RawVolume<T> volume(raw_volume_file_name, width, height, depth);
+
   const uint8_t *volume_data = reinterpret_cast<const uint8_t *>(volume.data);
 
   size_t samples = 0;
@@ -156,8 +159,12 @@ void test_raw(const RawVolume<T> &volume) {
 }
 
 template <typename T, uint32_t N>
-void test_blocked(const RawVolume<T> &volume) {
+void test_blocked(const char *raw_volume_file_name, uint32_t width, uint32_t height, uint32_t depth) {
+  RawVolume<T> volume(raw_volume_file_name, width, height, depth);
+
   const uint8_t *volume_data = reinterpret_cast<const uint8_t *>(volume.data);
+
+  std::cout << "blocked " << N << " ";
 
   std::cout << measure_ns([&]{
     process_volume<T, N>(volume.width, volume.height, volume.depth, "tmp.data", "tmp.metadata", [&](uint32_t x, uint32_t y, uint32_t z) {
@@ -165,28 +172,34 @@ void test_blocked(const RawVolume<T> &volume) {
     });
   }) << " ";
 
+  size_t original_size = std::filesystem::file_size(raw_volume_file_name);
+  size_t block_size = std::filesystem::file_size("tmp.data");
+  size_t metadata_size = std::filesystem::file_size("tmp.metadata");
+
+  std::cout << float(block_size + metadata_size) / original_size << " ";
+
   size_t samples = 0;
 
   test_scalar([&](const glm::vec3 &pos) {
     samples++;
-    return sample_raw_scalar(volume_data, volume.width, volume.height, volume.depth, pos.x, pos.y, pos.z);
+    sample_raw_scalar(volume_data, volume.width, volume.height, volume.depth, pos.x, pos.y, pos.z);
   }); // MEM INIT
 
   std::cout << measure_ns([&]{
     test_scalar([&](const glm::vec3 &pos) {
-      return sample_raw_scalar(volume_data, volume.width, volume.height, volume.depth, pos.x, pos.y, pos.z);
+      sample_raw_scalar(volume_data, volume.width, volume.height, volume.depth, pos.x, pos.y, pos.z);
     });
   }) / samples << " ";
 
   std::cout << measure_ns([&]{
     test_simd([&](const simd::vec3 &pos, const simd::float_m &mask) {
-      return sample_raw_simd(volume_data, volume.width, volume.height, volume.depth, pos.x, pos.y, pos.z, mask);
+      sample_raw_simd(volume_data, volume.width, volume.height, volume.depth, pos.x, pos.y, pos.z, mask);
     });
   }) / samples << " ";
 
   std::cout << measure_ns([&]{
     test_packlet([&](const simd::vec3 &pos, const simd::float_m &mask) {
-      return sample_raw_simd(volume_data, volume.width, volume.height, volume.depth, pos.x, pos.y, pos.z, mask);
+      sample_raw_simd(volume_data, volume.width, volume.height, volume.depth, pos.x, pos.y, pos.z, mask);
     });
   }) / samples << " ";
 
@@ -203,12 +216,12 @@ int main(int argc, const char *argv[]) {
   std::cout << "# type build overhead scalar simd packlet\n";
 
   if (bytes_per_voxel == 1) {
-    RawVolume<uint8_t> volume(raw_volume_file_name, width, height, depth);
-    test_raw(volume);
+    test_raw<uint8_t>(raw_volume_file_name, width, height, depth);
+    test_blocked<uint8_t, 4>(raw_volume_file_name, width, height, depth);
   }
   else if (bytes_per_voxel == 2) {
-    RawVolume<uint16_t> volume(raw_volume_file_name, width, height, depth);
-    test_raw(volume);
+    test_raw<uint16_t>(raw_volume_file_name, width, height, depth);
+    test_blocked<uint8_t, 4>(raw_volume_file_name, width, height, depth);
   }
   else {
     throw std::runtime_error("Only one or two bytes per voxel!");

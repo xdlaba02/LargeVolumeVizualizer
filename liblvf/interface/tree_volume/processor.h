@@ -124,7 +124,6 @@ void process_volume(uint32_t width, uint32_t height, uint32_t depth, const char 
                 uint32_t voxel_x = block_start_x + in_block_x;
                 uint32_t original_voxel_x = voxel_x << 1;
 
-
                 uint32_t original_node_z = std::min(original_voxel_z / TreeVolume<T, N>::SUBVOLUME_SIDE, info.layers[layer - 1].depth_in_nodes  - 1);
                 uint32_t original_in_block_z = std::min(original_voxel_z - original_node_z * TreeVolume<T, N>::SUBVOLUME_SIDE, TreeVolume<T, N>::SUBVOLUME_SIDE - 1);
 

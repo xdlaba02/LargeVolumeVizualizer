@@ -415,6 +415,8 @@ int main(int argc, const char *argv[]) {
 
     parse_args(argc, argv, processed_volume, processed_metadata, transfer_function, width, height, depth, bytes_per_voxel);
 
+    TreeVolume<uint8_t, 4>::Info info(width, height, depth);
+
     if (bytes_per_voxel == 1) {
       vizualization_app<uint8_t>(processed_volume, processed_metadata, transfer_function, width, height, depth);
     }
