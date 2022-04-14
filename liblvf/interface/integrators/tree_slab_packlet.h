@@ -33,7 +33,7 @@ Vec4Packlet integrate_tree_slab_packlet(const TreeVolume<T, N> &volume, const Ra
     if (mask[j].isNotEmpty()) {
       range[j] = intersect_aabb_ray(ray[j], {0.f, 0.f, 0.f}, { volume.info.width_frac, volume.info.height_frac, volume.info.depth_frac});
 
-      mask[j] = mask[j] && range[j].min < range[j].max;
+      mask[j] &= range[j].min < range[j].max;
       dst[j] = {0.f, 0.f, 0.f, 1.f};
 
       if (mask[j].isNotEmpty()) {
@@ -54,14 +54,14 @@ Vec4Packlet integrate_tree_slab_packlet(const TreeVolume<T, N> &volume, const Ra
           continue;
         }
 
-        mask[j] = mask[j] && dst[j].a > terminate_thresh;
+        mask[j] &= dst[j].a > terminate_thresh;
 
         if (mask[j].isEmpty()) {
           continue;
         }
 
         // Next step does not intersect the block
-        mask[j] = mask[j] && slab_range[j].max < range[j].max;
+        mask[j] &= slab_range[j].max < range[j].max;
 
         if (mask[j].isEmpty()) {
           continue;
@@ -69,15 +69,13 @@ Vec4Packlet integrate_tree_slab_packlet(const TreeVolume<T, N> &volume, const Ra
 
         node_pos[j] = cell[j] * simd::float_v(exp2i(layer));
 
-        simd::float_m ray_outside = mask[j] && ((node_pos[j].x >= volume.info.layers[layer_index].width_in_nodes)
-                                            || (node_pos[j].y >= volume.info.layers[layer_index].height_in_nodes)
-                                            || (node_pos[j].z >= volume.info.layers[layer_index].depth_in_nodes));
-
-        if (ray_outside.isNotEmpty()) {
+        if (simd::float_m ray_outside = mask[j] && ((node_pos[j].x >= volume.info.layers[layer_index].width_in_nodes)
+                                                || (node_pos[j].y >= volume.info.layers[layer_index].height_in_nodes)
+                                                || (node_pos[j].z >= volume.info.layers[layer_index].depth_in_nodes)); ray_outside.isNotEmpty()) {
           slab_range[j].min(ray_outside) = range[j].max;
           slab_range[j].max(ray_outside) = range[j].max;
 
-          mask[j] = mask[j] && !ray_outside;
+          mask[j] &= !ray_outside;
 
           if (mask[j].isEmpty()) {
             continue;
@@ -98,26 +96,22 @@ Vec4Packlet integrate_tree_slab_packlet(const TreeVolume<T, N> &volume, const Ra
 
         simd::vec4 node_rgba = transfer_function(node_min, node_max, mask[j]);
 
-        simd::float_m block_empty = mask[j] && (node_rgba.a == 0.f);
-
         // Empty space skipping
-        if (block_empty.isNotEmpty()) {
+        if (simd::float_m block_empty = mask[j] && (node_rgba.a == 0.f); block_empty.isNotEmpty()) {
           blend(transfer_function(slab_start_value[j], node_min, block_empty), dst[j], slab_range[j].max - slab_range[j].min, block_empty); // finish previous step with block value
 
           slab_range[j].min(block_empty) = range[j].max;
           slab_range[j].max(block_empty) = range[j].max;
 
-          mask[j] = mask[j] && !block_empty;
+          mask[j] &= !block_empty;
 
           if (mask[j].isEmpty()) {
             continue;
           }
         }
 
-        simd::float_m node_uniform = mask[j] && (node_min == node_max);
-
         // Fast integration of uniform space
-        if (node_uniform.isNotEmpty()) {
+        if (simd::float_m node_uniform = mask[j] && (node_min == node_max); node_uniform.isNotEmpty()) {
           blend(transfer_function(slab_start_value[j], node_min, node_uniform), dst[j], slab_range[j].max - slab_range[j].min, node_uniform); // finish previous step with block value
           blend(node_rgba, dst[j], range[j].max - slab_range[j].max, node_uniform); // blend the rest of the block
 
@@ -125,25 +119,31 @@ Vec4Packlet integrate_tree_slab_packlet(const TreeVolume<T, N> &volume, const Ra
           slab_range[j].min(node_uniform) = range[j].max;
           slab_range[j].max(node_uniform) = range[j].max + step;
 
-          mask[j] = mask[j] && !node_uniform;
+          mask[j] &= !node_uniform;
         }
       }
 
-      MaskPacklet integrate_mask = integrate_predicate(cell, layer, mask);
+      MaskPacklet should_integrate = integrate_predicate(cell, layer, mask);
+
+      simd::float_v coef = exp2i(layer) * float(TreeVolume<T, N>::SUBVOLUME_SIDE);
 
       for (uint32_t j = 0; j < simd::len; j++) {
-        for (integrate_mask[j] &= mask[j] & (slab_range[j].max < range[j].max); integrate_mask[j].isNotEmpty(); integrate_mask[j] &= slab_range[j].max < range[j].max) {
-          simd::vec3 pos = ray[j].origin + ray[j].direction * slab_range[j].max;
 
-          simd::vec3 in_block_pos = (pos - cell[j]) * simd::float_v(exp2i(layer)) * simd::float_v(TreeVolume<T, N>::SUBVOLUME_SIDE);
+        mask[j] &= !should_integrate[j];
 
-          simd::float_v slab_end_value = sample(volume, block_handle[j], in_block_pos.x, in_block_pos.y, in_block_pos.z, integrate_mask[j]);
+        simd::vec3 shift = (ray[j].origin - cell[j]) * coef;
+        simd::vec3 mult = ray[j].direction * coef;
 
-          blend(transfer_function(slab_start_value[j], slab_end_value, integrate_mask[j]), dst[j], slab_range[j].max - slab_range[j].min, integrate_mask[j]);
+        for (should_integrate[j] &= mask[j] & (slab_range[j].max < range[j].max); should_integrate[j].isNotEmpty(); should_integrate[j] &= slab_range[j].max < range[j].max) {
+          simd::vec3 in_block_pos = slab_range[j].max * mult + shift;
 
-          slab_start_value[j](integrate_mask[j]) = slab_end_value;
-          slab_range[j].min(integrate_mask[j]) = slab_range[j].max;
-          slab_range[j].max(integrate_mask[j]) = slab_range[j].max + step;
+          simd::float_v slab_end_value = sample(volume, block_handle[j], in_block_pos.x, in_block_pos.y, in_block_pos.z, should_integrate[j]);
+
+          blend(transfer_function(slab_start_value[j], slab_end_value, should_integrate[j]), dst[j], slab_range[j].max - slab_range[j].min, should_integrate[j]);
+
+          slab_start_value[j](should_integrate[j]) = slab_end_value;
+          slab_range[j].min(should_integrate[j]) = slab_range[j].max;
+          slab_range[j].max(should_integrate[j]) = slab_range[j].max + step;
         }
       }
     });

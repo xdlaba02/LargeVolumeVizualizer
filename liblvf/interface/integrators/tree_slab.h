@@ -78,11 +78,14 @@ glm::vec4 integrate_tree_slab(const TreeVolume<T, N> &volume, const Ray &ray, fl
       }
 
       if (integrate_predicate(cell, layer)) {
+
+        float coef = exp2i(layer) * float(TreeVolume<T, N>::SUBVOLUME_SIDE);
+        glm::vec3 shift = (ray.origin - cell) * coef;
+        glm::vec3 mult = ray.direction * coef;
+
         // Numeric integration
         while (slab_range.max < range.max) {
-          glm::vec3 pos = ray.origin + ray.direction * slab_range.max;
-
-          glm::vec3 in_block_pos = (pos - cell) * exp2i(layer) * float(TreeVolume<T, N>::SUBVOLUME_SIDE);
+          glm::vec3 in_block_pos = slab_range.max * mult + shift;
 
           float slab_end_value = sample(volume, node.block_handle, in_block_pos.x, in_block_pos.y, in_block_pos.z);
 

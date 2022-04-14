@@ -23,7 +23,7 @@ simd::vec4 integrate_tree_slab_simd(const TreeVolume<T, N> &volume, const simd::
 
   simd::RayRange range = intersect_aabb_ray(ray, {0.f, 0.f, 0.f}, { volume.info.width_frac, volume.info.height_frac, volume.info.depth_frac});
 
-  mask = mask && range.min < range.max;
+  mask &= range.min < range.max;
 
   if (mask.isNotEmpty()) {
     simd::RayRange slab_range { range.min, range.min };
@@ -32,14 +32,14 @@ simd::vec4 integrate_tree_slab_simd(const TreeVolume<T, N> &volume, const simd::
     ray_octree_traversal(ray, range, {}, 0, mask, [&](const simd::RayRange &range, const simd::vec3 &cell, uint32_t layer, simd::float_m &mask) {
       uint8_t layer_index = std::size(volume.info.layers) - 1 - layer;
 
-      mask = mask && dst.a > terminate_thresh;
+      mask &= dst.a > terminate_thresh;
 
       if (mask.isEmpty()) {
         return;
       }
 
       // Next step does not intersect the block
-      mask = mask && slab_range.max < range.max;
+      mask &= slab_range.max < range.max;
 
       if (mask.isEmpty()) {
         return;
@@ -47,15 +47,13 @@ simd::vec4 integrate_tree_slab_simd(const TreeVolume<T, N> &volume, const simd::
 
       simd::vec3 node_pos = cell * simd::float_v(exp2i(layer));
 
-      simd::float_m ray_outside = mask && ((node_pos.x >= volume.info.layers[layer_index].width_in_nodes)
-                                       || (node_pos.y >= volume.info.layers[layer_index].height_in_nodes)
-                                       || (node_pos.z >= volume.info.layers[layer_index].depth_in_nodes));
-
-      if (ray_outside.isNotEmpty()) {
+      if (simd::float_m ray_outside = mask && ((node_pos.x >= volume.info.layers[layer_index].width_in_nodes)
+                                           ||  (node_pos.y >= volume.info.layers[layer_index].height_in_nodes)
+                                           ||  (node_pos.z >= volume.info.layers[layer_index].depth_in_nodes)); ray_outside.isNotEmpty()) {
         slab_range.min(ray_outside) = range.max;
         slab_range.max(ray_outside) = range.max;
 
-        mask = mask && !ray_outside;
+        mask &= !ray_outside;
 
         if (mask.isEmpty()) {
           return;
@@ -84,7 +82,7 @@ simd::vec4 integrate_tree_slab_simd(const TreeVolume<T, N> &volume, const simd::
         slab_range.min(block_empty) = range.max;
         slab_range.max(block_empty) = range.max;
 
-        mask = mask && !block_empty;
+        mask &= !block_empty;
 
         if (mask.isEmpty()) {
           return;
@@ -100,7 +98,7 @@ simd::vec4 integrate_tree_slab_simd(const TreeVolume<T, N> &volume, const simd::
         slab_range.min(node_uniform) = range.max;
         slab_range.max(node_uniform) = range.max + step;
 
-        mask = mask && !node_uniform;
+        mask &= !node_uniform;
 
         if (mask.isEmpty()) {
           return;
@@ -108,18 +106,26 @@ simd::vec4 integrate_tree_slab_simd(const TreeVolume<T, N> &volume, const simd::
       }
 
       // Numeric integration
-      for (simd::float_m integrate_mask = mask & integrate_predicate(cell, layer, mask) & slab_range.max < range.max; integrate_mask.isNotEmpty(); integrate_mask &= slab_range.max < range.max) {
-        simd::vec3 pos = ray.origin + ray.direction * slab_range.max;
+      if (simd::float_m should_integrate = mask & integrate_predicate(cell, layer, mask); should_integrate.isNotEmpty()) {
 
-        simd::vec3 in_block_pos = (pos - cell) * simd::float_v(exp2i(layer)) * simd::float_v(TreeVolume<T, N>::SUBVOLUME_SIDE);
+        mask &= !should_integrate;
 
-        simd::float_v slab_end_value = sample(volume, block_handle, in_block_pos.x, in_block_pos.y, in_block_pos.z, integrate_mask);
+        simd::float_v coef = exp2i(layer) * float(TreeVolume<T, N>::SUBVOLUME_SIDE);
 
-        blend(transfer_function(slab_start_value, slab_end_value, integrate_mask), dst, slab_range.max - slab_range.min, integrate_mask);
+        simd::vec3 shift = (ray.origin - cell) * coef;
+        simd::vec3 mult = ray.direction * coef;
 
-        slab_start_value(integrate_mask) = slab_end_value;
-        slab_range.min(integrate_mask) = slab_range.max;
-        slab_range.max(integrate_mask) = slab_range.max + step;
+        for (should_integrate &= slab_range.max < range.max; should_integrate.isNotEmpty(); should_integrate &= slab_range.max < range.max) {
+          simd::vec3 in_block_pos = slab_range.max * mult + shift;
+
+          simd::float_v slab_end_value = sample(volume, block_handle, in_block_pos.x, in_block_pos.y, in_block_pos.z, should_integrate);
+
+          blend(transfer_function(slab_start_value, slab_end_value, should_integrate), dst, slab_range.max - slab_range.min, should_integrate);
+
+          slab_start_value(should_integrate) = slab_end_value;
+          slab_range.min(should_integrate) = slab_range.max;
+          slab_range.max(should_integrate) = slab_range.max + step;
+        }
       }
     });
   }
