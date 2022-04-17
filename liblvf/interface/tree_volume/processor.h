@@ -50,7 +50,7 @@ void process_volume(uint32_t width, uint32_t height, uint32_t depth, const char 
         node.min    = 255;
         node.max    = 0;
 
-        typename TreeVolume<T, N>::Block block {};
+        std::vector<T> block(TreeVolume<T, N>::BLOCK_SIZE);
 
         for (uint32_t i = 0; i < TreeVolume<T, N>::BLOCK_SIZE; i++) {
           uint32_t x, y, z;
@@ -70,7 +70,7 @@ void process_volume(uint32_t width, uint32_t height, uint32_t depth, const char 
           #pragma omp critical
           {
             node.block_handle = block_handle++;
-            tree_volume.write((const char *)block, sizeof(block));
+            tree_volume.write((const char *)block.data(), TreeVolume<T, N>::BLOCK_BYTES);
           }
         }
       }
@@ -107,7 +107,7 @@ void process_volume(uint32_t width, uint32_t height, uint32_t depth, const char 
           node.min    = 255;
           node.max    = 0;
 
-          typename TreeVolume<T, N>::Block block {};
+          std::vector<T> block(TreeVolume<T, N>::BLOCK_SIZE);
 
           for (uint32_t in_block_z = 0; in_block_z < TreeVolume<T, N>::BLOCK_SIDE; in_block_z++) {
 
@@ -175,7 +175,7 @@ void process_volume(uint32_t width, uint32_t height, uint32_t depth, const char 
             #pragma omp critical
             {
               node.block_handle = block_handle++;
-              tree_volume.write((const char *)block, sizeof(block));
+              tree_volume.write((const char *)block.data(), TreeVolume<T, N>::BLOCK_BYTES);
             }
           }
         }

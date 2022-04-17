@@ -9,6 +9,12 @@
 #include <vector>
 #include <cmath>
 
+#ifndef NBITS
+  static constexpr const uint8_t N = 5;
+#else
+  static constexpr const uint8_t N = NBITS;
+#endif
+
 void parse_args(int argc, const char *argv[], const char *&raw_volume, const char *&processed_volume, const char *&processed_metadata, uint32_t &width, uint32_t &height, uint32_t &depth, uint32_t &bytes_per_voxel) {
   if (argc != 8) {
     throw std::runtime_error("Wrong number of arguments!");
@@ -71,14 +77,14 @@ int main(int argc, const char *argv[]) {
     if (bytes_per_voxel == 1) {
       RawVolume<uint8_t> volume(raw_volume_file_name, width, height, depth);
 
-      process_volume<uint8_t, 4>(width, height, depth, processed_volume_file_name, metadata_file_name, [&](uint32_t x, uint32_t y, uint32_t z) {
+      process_volume<uint8_t, N>(width, height, depth, processed_volume_file_name, metadata_file_name, [&](uint32_t x, uint32_t y, uint32_t z) {
         return volume.data[volume.voxel_handle(x, y, z)];
       });
     }
     else if (bytes_per_voxel == 2) {
       RawVolume<uint16_t> volume(raw_volume_file_name, width, height, depth);
 
-      process_volume<uint16_t, 4>(width, height, depth, processed_volume_file_name, metadata_file_name, [&](uint32_t x, uint32_t y, uint32_t z) {
+      process_volume<uint16_t, N>(width, height, depth, processed_volume_file_name, metadata_file_name, [&](uint32_t x, uint32_t y, uint32_t z) {
         return volume.data[volume.voxel_handle(x, y, z)];
       });
     }

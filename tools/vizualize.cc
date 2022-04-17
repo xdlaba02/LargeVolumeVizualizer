@@ -3,6 +3,8 @@
 
 #include <tree_volume/tree_volume.h>
 
+#include <utils/scan_tree.h>
+
 #include <renderers/scalar.h>
 #include <renderers/simd.h>
 #include <renderers/packlet.h>
@@ -30,6 +32,12 @@
 #include <vector>
 #include <chrono>
 #include <sstream>
+
+#ifndef NBITS
+  static constexpr const uint8_t N = 5;
+#else
+  static constexpr const uint8_t N = NBITS;
+#endif
 
 void parse_args(int argc, const char *argv[], const char *&processed_volume, const char *&processed_metadata, const char *&transfer_function, uint32_t &width, uint32_t &height, uint32_t &depth, uint32_t &bytes_per_voxel) {
   if (argc != 8) {
@@ -79,7 +87,7 @@ void parse_args(int argc, const char *argv[], const char *&processed_volume, con
 
 template <typename T>
 void vizualization_app(const char *processed_volume, const char *processed_metadata, const char *transfer_function_file_name, uint32_t width, uint32_t height, uint32_t depth) {
-  TreeVolume<T, 4> volume(processed_volume, processed_metadata, width, height, depth);
+  TreeVolume<T, N> volume(processed_volume, processed_metadata, width, height, depth);
 
   TF1D tf1d = TF1D::load_from_file(transfer_function_file_name);
 
@@ -120,7 +128,7 @@ void vizualization_app(const char *processed_volume, const char *processed_metad
 
   const glm::vec3 camera_up = glm::vec3(0.0f, 1.0f, 0.0f);
 
-  glm::vec3 camera_pos = glm::vec3(0.0f, 0.0f, 2.0f);
+  glm::vec3 camera_pos = glm::vec3(0.0f, 0.0f, 1.0f);
   float camera_yaw     = -90;
   float camera_pitch   = 0;
 
@@ -136,7 +144,8 @@ void vizualization_app(const char *processed_volume, const char *processed_metad
 
   float step = 0.001f;
   float quality = 0.01f;
-  float fov = 45.f;
+  float bias = 0.0f;
+  float fov = 90.f;
   int layer_renderer_layer = 0;
   float terminate_thresh = 0.01f;
 
@@ -148,6 +157,8 @@ void vizualization_app(const char *processed_volume, const char *processed_metad
     RENDERER_TREE_VECTOR,
     RENDERER_TREE_PACKLET,
   } renderer = RENDERER_TREE_VECTOR;
+
+  size_t used_blocks = 0;
 
   float t = 0.f;
   auto prev_time = std::chrono::steady_clock::now();
@@ -216,6 +227,24 @@ void vizualization_app(const char *processed_volume, const char *processed_metad
 
     // RENDERING PART
 
+    auto pretty_bytes = [](size_t bytes) {
+      uint8_t i = 0;
+
+      double value = bytes;
+
+      while (value >= 1024 && i < 5)
+      {
+          value /= 1024;
+          i++;
+      }
+
+      std::stringstream ss {};
+
+      ss << value << " " << std::array<const char *, 5>{ "B", "KiB", "MiB", "Gib", "TiB" }[i];
+
+      return ss.str();
+    };
+
     window.makeContextCurrent();
 
     ImGui_ImplOpenGL2_NewFrame();
@@ -224,12 +253,8 @@ void vizualization_app(const char *processed_volume, const char *processed_metad
 
     if (ImGui::Begin("Configuration", &imgui_show, 0)) {
       if (ImGui::TreeNode("Info")) {
-        if (delta < 1.f) {
-          ImGui::Text("%3.1f FPS", 1.f / delta);
-        }
-        else {
-          ImGui::Text("%3.1f SPF", delta);
-        }
+        ImGui::Text("%3.3f FPS", 1.f / delta);
+        ImGui::Text("%ld Blocks = %s", used_blocks, pretty_bytes(used_blocks * TreeVolume<T, N>::BLOCK_BYTES).c_str());
         ImGui::TreePop();
       }
 
@@ -247,6 +272,7 @@ void vizualization_app(const char *processed_volume, const char *processed_metad
         if (renderer == RENDERER_TREE_SCALAR || renderer == RENDERER_TREE_VECTOR || renderer == RENDERER_TREE_PACKLET) {
           //ImGui::SliderFloat("Quality", &quality, 0.0001f, 1.f, "%.4f", ImGuiSliderFlags_Logarithmic);
         ImGui::SliderFloat("Quality", &quality, 0.f, .1f, "%.4f");
+          ImGui::DragFloat("Bias", &bias, .01f);
         }
         else if (renderer == RENDERER_LAYER_SCALAR || renderer == RENDERER_LAYER_VECTOR || renderer == RENDERER_LAYER_DDA) {
           ImGui::SliderInt("Layer", &layer_renderer_layer, 0, std::size(volume.info.layers) - 1);
@@ -308,6 +334,30 @@ void vizualization_app(const char *processed_volume, const char *processed_metad
 
     float projected_size = quality / glm::distance(camera_pos, volume_pos); // projected size ve stredu. Vepredu budou jemnejsi bloky, vzadu hrubsi
 
+    if (renderer == RENDERER_TREE_SCALAR || renderer == RENDERER_TREE_VECTOR || renderer == RENDERER_TREE_PACKLET) {
+      used_blocks = 0;
+      scan_tree<T, N>(volume.info, {}, 0, [&](const glm::vec3 &cell, uint8_t layer) {
+        float cell_size = exp2i(-layer);
+        float child_size = exp2i(-layer - 1);
+
+        glm::vec3 cell_center = mt * glm::vec4(cell + child_size, 1.f);  // convert to world space
+
+        float block_distance = glm::distance(camera_pos, cell_center) + bias;
+
+        if (layer == std::size(volume.info.layers) - 1 || cell_size <= block_distance * projected_size) {
+          used_blocks++;
+          return false;
+        }
+        else {
+          return true;
+        }
+      });
+    }
+    else if (renderer == RENDERER_LAYER_SCALAR || renderer == RENDERER_LAYER_VECTOR || renderer == RENDERER_LAYER_DDA) {
+      size_t layer_index = std::size(volume.info.layers) - layer_renderer_layer - 1;
+      used_blocks = volume.info.layers[layer_index].width_in_nodes * volume.info.layers[layer_index].height_in_nodes * volume.info.layers[layer_index].depth_in_nodes;
+    }
+
     switch (renderer) {
       case RENDERER_LAYER_DDA:
         render_scalar(window.width(), window.height(), fov, vmt, raster.data(), [&](const Ray &ray) {
@@ -331,8 +381,14 @@ void vizualization_app(const char *processed_volume, const char *processed_metad
         glm::mat4 mt = model * texture;
         render_scalar(window.width(), window.height(), fov, vmt, raster.data(), [&](const Ray &ray) {
           return integrate_tree_slab(volume, ray, step, terminate_thresh, transfer_function_scalar, [&](const glm::vec3 &cell, uint8_t layer) {
-            float block_distance = glm::distance(camera_pos, glm::vec3(mt * glm::vec4(cell + exp2i(-layer - 1), 1.f))); // convert to world space
-            return layer == std::size(volume.info.layers) - 1 || exp2i(-layer) <= block_distance * projected_size;
+            float cell_size = exp2i(-layer);
+            float child_size = exp2i(-layer - 1);
+
+            glm::vec3 cell_center = mt * glm::vec4(cell + child_size, 1.f);  // convert to world space
+
+            float block_distance = glm::distance(camera_pos, cell_center) + bias;
+
+            return layer == std::size(volume.info.layers) - 1 || cell_size <= block_distance * projected_size;
           });
         });
       }
@@ -350,7 +406,9 @@ void vizualization_app(const char *processed_volume, const char *processed_metad
             for (uint8_t k = 0; k < simd::len; k++) {
               if (mask[k]) {
                 glm::vec3 single_cell { cell.x[k], cell.y[k], cell.z[k] };
-                block_distance[k] = glm::distance(camera_pos, glm::vec3(mt * glm::vec4(single_cell + child_size, 1.f))); // convert to world space
+                glm::vec3 cell_center = mt * glm::vec4(single_cell + child_size, 1.f);  // convert to world space
+
+                block_distance[k] = glm::distance(camera_pos, cell_center) + bias; // convert to world space
               }
             }
 
@@ -376,7 +434,9 @@ void vizualization_app(const char *processed_volume, const char *processed_metad
                 for (uint8_t k = 0; k < simd::len; k++) {
                   if (mask_packlet[j][k]) {
                     glm::vec3 single_cell { cell_packlet[j].x[k], cell_packlet[j].y[k], cell_packlet[j].z[k] };
-                    block_distance[k] = glm::distance(camera_pos, glm::vec3(mt * glm::vec4(single_cell + child_size, 1.f))); // convert to world space
+                    glm::vec3 cell_center = mt * glm::vec4(single_cell + child_size, 1.f);  // convert to world space
+
+                    block_distance[k] = glm::distance(camera_pos, cell_center) + bias; // convert to world space
                   }
                 }
 
@@ -414,8 +474,6 @@ int main(int argc, const char *argv[]) {
     uint32_t bytes_per_voxel;
 
     parse_args(argc, argv, processed_volume, processed_metadata, transfer_function, width, height, depth, bytes_per_voxel);
-
-    TreeVolume<uint8_t, 4>::Info info(width, height, depth);
 
     if (bytes_per_voxel == 1) {
       vizualization_app<uint8_t>(processed_volume, processed_metadata, transfer_function, width, height, depth);
