@@ -143,7 +143,7 @@ void vizualization_app(const char *processed_volume, const char *processed_metad
   bool imgui_show = true;
 
   float step = 0.001f;
-  float quality = 0.01f;
+  float quality = 0.001125f;
   float bias = 0.0f;
   float fov = 90.f;
   int layer_renderer_layer = 0;
@@ -271,7 +271,7 @@ void vizualization_app(const char *processed_volume, const char *processed_metad
 
         if (renderer == RENDERER_TREE_SCALAR || renderer == RENDERER_TREE_VECTOR || renderer == RENDERER_TREE_PACKLET) {
           //ImGui::SliderFloat("Quality", &quality, 0.0001f, 1.f, "%.4f", ImGuiSliderFlags_Logarithmic);
-        ImGui::SliderFloat("Quality", &quality, 0.f, .1f, "%.4f");
+        ImGui::SliderFloat("Quality", &quality, 0.0005f, .005f, "%.4f");
           ImGui::DragFloat("Bias", &bias, .01f);
         }
         else if (renderer == RENDERER_LAYER_SCALAR || renderer == RENDERER_LAYER_VECTOR || renderer == RENDERER_LAYER_DDA) {
@@ -332,7 +332,7 @@ void vizualization_app(const char *processed_volume, const char *processed_metad
 
     glm::mat4 vmt = view * mt; // converts volume from world space to camera space
 
-    float projected_size = quality / glm::distance(camera_pos, volume_pos); // projected size ve stredu. Vepredu budou jemnejsi bloky, vzadu hrubsi
+    float projected_size = quality * TreeVolume<T, N>::BLOCK_SIDE / glm::distance(camera_pos, volume_pos); // projected size ve stredu. Vepredu budou jemnejsi bloky, vzadu hrubsi
 
     if (renderer == RENDERER_TREE_SCALAR || renderer == RENDERER_TREE_VECTOR || renderer == RENDERER_TREE_PACKLET) {
       used_blocks = 0;

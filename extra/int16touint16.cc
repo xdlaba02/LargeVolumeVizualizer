@@ -12,10 +12,10 @@ int main(int argc, char *argv[]) {
     return 2;
   }
 
-  int8_t val;
+  int16_t val;
 
   while (input.read(reinterpret_cast<char *>(&val), sizeof(val))) {
-    uint8_t converted_val = val + 128;
+    uint16_t converted_val = val + 32768;
     output.write(reinterpret_cast<const char *>(&converted_val), sizeof(converted_val));
   }
 

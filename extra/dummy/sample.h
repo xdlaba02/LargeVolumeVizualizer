@@ -6,8 +6,8 @@
 #include <cstdint>
 #include <cstddef>
 
-template <size_t BLOCK_BITS>
-void sample_morton_scalar(const uint8_t *data, uint64_t block_index, float denorm_x, float denorm_y, float denorm_z) {
+template <typename T, size_t BLOCK_BITS>
+void sample_morton_scalar(const T *data, uint64_t block_index, float denorm_x, float denorm_y, float denorm_z) {
   static constexpr const size_t BLOCK_SIZE = size_t{1} << (BLOCK_BITS * 3);
 
   uint32_t vox_x[2];
@@ -41,8 +41,8 @@ void sample_morton_scalar(const uint8_t *data, uint64_t block_index, float denor
   }
 }
 
-template <size_t BLOCK_BITS>
-void sample_linear_scalar(const uint8_t *data, uint64_t block_index, float denorm_x, float denorm_y, float denorm_z) {
+template <typename T, size_t BLOCK_BITS>
+void sample_linear_scalar(const T *data, uint64_t block_index, float denorm_x, float denorm_y, float denorm_z) {
   static constexpr const size_t BLOCK_SIZE = size_t{1} << (BLOCK_BITS * 3);
 
   uint32_t vox_x[2];
@@ -68,8 +68,8 @@ void sample_linear_scalar(const uint8_t *data, uint64_t block_index, float denor
   }
 }
 
-template <size_t BLOCK_BITS>
-void sample_morton_simd(const uint8_t *data, const std::array<uint64_t, simd::len> &block_indices, const simd::float_v &denorm_x, const simd::float_v &denorm_y, const simd::float_v &denorm_z, const simd::float_m &mask) {
+template <typename T, size_t BLOCK_BITS>
+void sample_morton_simd(const T *data, const std::array<uint64_t, simd::len> &block_indices, const simd::float_v &denorm_x, const simd::float_v &denorm_y, const simd::float_v &denorm_z, const simd::float_m &mask) {
   static constexpr const size_t BLOCK_SIZE = size_t{1} << (BLOCK_BITS * 3);
 
   simd::uint32_v indices[2][2][2];
@@ -119,8 +119,8 @@ void sample_morton_simd(const uint8_t *data, const std::array<uint64_t, simd::le
   }
 }
 
-template <size_t BLOCK_BITS>
-void sample_linear_simd(const uint8_t *data, const std::array<uint64_t, simd::len> &block_indices, const simd::float_v &denorm_x, const simd::float_v &denorm_y, const simd::float_v &denorm_z, const simd::float_m &mask) {
+template <typename T, size_t BLOCK_BITS>
+void sample_linear_simd(const T *data, const std::array<uint64_t, simd::len> &block_indices, const simd::float_v &denorm_x, const simd::float_v &denorm_y, const simd::float_v &denorm_z, const simd::float_m &mask) {
   static constexpr const size_t BLOCK_SIZE = size_t{1} << (BLOCK_BITS * 3);
 
   simd::uint32_v indices[2][2][2];
@@ -162,7 +162,8 @@ void sample_linear_simd(const uint8_t *data, const std::array<uint64_t, simd::le
   }
 }
 
-void sample_raw_scalar(const uint8_t *data, uint32_t width, uint32_t height, uint32_t depth, float x, float y, float z) {
+template <typename T>
+void sample_raw_scalar(const T *data, uint32_t width, uint32_t height, uint32_t depth, float x, float y, float z) {
   float denorm_x = x * width  - 0.5f;
   float denorm_y = y * height - 0.5f;
   float denorm_z = z * depth  - 0.5f;
@@ -190,7 +191,8 @@ void sample_raw_scalar(const uint8_t *data, uint32_t width, uint32_t height, uin
   }
 }
 
-simd::float_v sample_raw_simd(const uint8_t *data, uint32_t width, uint32_t height, uint32_t depth, const simd::float_v &x, const simd::float_v &y, const simd::float_v &z, const simd::float_m &mask) {
+template <typename T>
+void sample_raw_simd(const T *data, uint32_t width, uint32_t height, uint32_t depth, const simd::float_v &x, const simd::float_v &y, const simd::float_v &z, const simd::float_m &mask) {
   simd::float_v denorm_x = x * width  - 0.5f;
   simd::float_v denorm_y = y * height - 0.5f;
   simd::float_v denorm_z = z * depth  - 0.5f;
@@ -220,12 +222,12 @@ simd::float_v sample_raw_simd(const uint8_t *data, uint32_t width, uint32_t heig
       }
     }
   }
-
-  return v;
 }
 
-template <size_t SUBVOLUME_SIDE, typename F>
+template <size_t BITS, typename F>
 void sample_blocked_scalar(uint32_t width_in_blocks, uint32_t height_in_blocks, uint32_t depth_in_blocks, float x, float y, float z, const F &func) {
+  static constexpr const uint32_t SUBVOLUME_SIDE = (uint32_t(1) << BITS) - 1;
+
   float denorm_x = x * width_in_blocks  * SUBVOLUME_SIDE  - 0.5f;
   float denorm_y = y * height_in_blocks * SUBVOLUME_SIDE - 0.5f;
   float denorm_z = z * depth_in_blocks  * SUBVOLUME_SIDE  - 0.5f;
@@ -242,11 +244,13 @@ void sample_blocked_scalar(uint32_t width_in_blocks, uint32_t height_in_blocks, 
   float in_block_y = denorm_y - block_y * SUBVOLUME_SIDE;
   float in_block_z = denorm_z - block_z * SUBVOLUME_SIDE;
 
-  func(block_x + block_y * width_in_blocks + block_z * width_in_blocks * height_in_blocks, in_block_x, in_block_y, in_block_z);
+  func(block_x, block_y, block_z, in_block_x, in_block_y, in_block_z);
 }
 
-template <size_t SUBVOLUME_SIDE, typename F>
+template <size_t BITS, typename F>
 void sample_blocked_simd(uint32_t width_in_blocks, uint32_t height_in_blocks, uint32_t depth_in_blocks, simd::float_v x, simd::float_v y, simd::float_v z, const F &func) {
+  static constexpr const uint32_t SUBVOLUME_SIDE = (uint32_t(1) << BITS) - 1;
+
   simd::float_v denorm_x = x * width_in_blocks  * SUBVOLUME_SIDE - 0.5f;
   simd::float_v denorm_y = y * height_in_blocks * SUBVOLUME_SIDE - 0.5f;
   simd::float_v denorm_z = z * depth_in_blocks  * SUBVOLUME_SIDE - 0.5f;
@@ -263,11 +267,5 @@ void sample_blocked_simd(uint32_t width_in_blocks, uint32_t height_in_blocks, ui
   simd::float_v in_block_y = denorm_y - block_y * simd::float_v(SUBVOLUME_SIDE);
   simd::float_v in_block_z = denorm_z - block_z * simd::float_v(SUBVOLUME_SIDE);
 
-
-  std::array<uint64_t, simd::len> block_indices;
-  for (uint8_t k = 0; k < simd::len; k++) {
-    block_indices[k] = (uint64_t)block_x[k] + (uint64_t)block_y[k] * width_in_blocks + (uint64_t)block_z[k] * width_in_blocks * height_in_blocks;
-  }
-
-  func(block_indices, in_block_x, in_block_y, in_block_z);
+  func(block_x, block_y, block_z, in_block_x, in_block_y, in_block_z);
 }
