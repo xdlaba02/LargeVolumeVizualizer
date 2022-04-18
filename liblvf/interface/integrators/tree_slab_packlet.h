@@ -135,7 +135,7 @@ Vec4Packlet integrate_tree_slab_packlet(const TreeVolume<T, N> &volume, const Ra
         simd::vec3 shift = (ray[j].origin - cell[j]) * coef;
         simd::vec3 mult = ray[j].direction * coef;
 
-        for (should_integrate[j] &= (slab_range[j].max < range[j].max); should_integrate[j].isNotEmpty(); should_integrate[j] &= slab_range[j].max < range[j].max && mask[j] &= dst[j].a > terminate_thresh) {
+        for (should_integrate[j] &= (slab_range[j].max < range[j].max); should_integrate[j].isNotEmpty(); should_integrate[j] &= slab_range[j].max < range[j].max && dst[j].a > terminate_thresh) {
           simd::vec3 in_block_pos = slab_range[j].max * mult + shift;
 
           simd::float_v slab_end_value = sample(volume, block_handle[j], in_block_pos.x, in_block_pos.y, in_block_pos.z, should_integrate[j]);
