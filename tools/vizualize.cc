@@ -143,7 +143,7 @@ void vizualization_app(const char *processed_volume, const char *processed_metad
   bool imgui_show = true;
 
   float step = 0.001f;
-  float quality = 0.001125f;
+  float quality = 1.f;
   float bias = 0.0f;
   float fov = 90.f;
   int layer_renderer_layer = 0;
@@ -157,8 +157,6 @@ void vizualization_app(const char *processed_volume, const char *processed_metad
     RENDERER_TREE_VECTOR,
     RENDERER_TREE_PACKLET,
   } renderer = RENDERER_TREE_VECTOR;
-
-  size_t used_blocks = 0;
 
   float t = 0.f;
   auto prev_time = std::chrono::steady_clock::now();
@@ -227,24 +225,6 @@ void vizualization_app(const char *processed_volume, const char *processed_metad
 
     // RENDERING PART
 
-    auto pretty_bytes = [](size_t bytes) {
-      uint8_t i = 0;
-
-      double value = bytes;
-
-      while (value >= 1024 && i < 5)
-      {
-          value /= 1024;
-          i++;
-      }
-
-      std::stringstream ss {};
-
-      ss << value << " " << std::array<const char *, 5>{ "B", "KiB", "MiB", "Gib", "TiB" }[i];
-
-      return ss.str();
-    };
-
     window.makeContextCurrent();
 
     ImGui_ImplOpenGL2_NewFrame();
@@ -254,7 +234,6 @@ void vizualization_app(const char *processed_volume, const char *processed_metad
     if (ImGui::Begin("Configuration", &imgui_show, 0)) {
       if (ImGui::TreeNode("Info")) {
         ImGui::Text("%3.3f FPS", 1.f / delta);
-        ImGui::Text("%ld Blocks = %s", used_blocks, pretty_bytes(used_blocks * TreeVolume<T, N>::BLOCK_BYTES).c_str());
         ImGui::TreePop();
       }
 
@@ -270,9 +249,14 @@ void vizualization_app(const char *processed_volume, const char *processed_metad
         ImGui::RadioButton("Packlet Tree", reinterpret_cast<int *>(&renderer), RENDERER_TREE_PACKLET);
 
         if (renderer == RENDERER_TREE_SCALAR || renderer == RENDERER_TREE_VECTOR || renderer == RENDERER_TREE_PACKLET) {
-          //ImGui::SliderFloat("Quality", &quality, 0.0001f, 1.f, "%.4f", ImGuiSliderFlags_Logarithmic);
-        ImGui::SliderFloat("Quality", &quality, 0.0005f, .005f, "%.4f");
-          ImGui::DragFloat("Bias", &bias, .01f);
+          ImGui::SliderFloat("Quality", &quality, 0.1f, 100.f, "%.1f", ImGuiSliderFlags_Logarithmic);
+
+          struct F
+          {
+              static float quality(void *quality, int i) { return -log2(i / 100.f) * *reinterpret_cast<float *>(quality); }
+          };
+
+          ImGui::PlotLines("Alpha to layer", F::quality, &quality, 100, 0, NULL, 0.0f, std::size(volume.info.layers) - 1, ImVec2(0, 80));
         }
         else if (renderer == RENDERER_LAYER_SCALAR || renderer == RENDERER_LAYER_VECTOR || renderer == RENDERER_LAYER_DDA) {
           ImGui::SliderInt("Layer", &layer_renderer_layer, 0, std::size(volume.info.layers) - 1);
@@ -334,30 +318,6 @@ void vizualization_app(const char *processed_volume, const char *processed_metad
 
     float projected_size = quality * TreeVolume<T, N>::BLOCK_SIDE / glm::distance(camera_pos, volume_pos); // projected size ve stredu. Vepredu budou jemnejsi bloky, vzadu hrubsi
 
-    if (renderer == RENDERER_TREE_SCALAR || renderer == RENDERER_TREE_VECTOR || renderer == RENDERER_TREE_PACKLET) {
-      used_blocks = 0;
-      scan_tree<T, N>(volume.info, {}, 0, [&](const glm::vec3 &cell, uint8_t layer) {
-        float cell_size = exp2i(-layer);
-        float child_size = exp2i(-layer - 1);
-
-        glm::vec3 cell_center = mt * glm::vec4(cell + child_size, 1.f);  // convert to world space
-
-        float block_distance = glm::distance(camera_pos, cell_center) + bias;
-
-        if (layer == std::size(volume.info.layers) - 1 || cell_size <= block_distance * projected_size) {
-          used_blocks++;
-          return false;
-        }
-        else {
-          return true;
-        }
-      });
-    }
-    else if (renderer == RENDERER_LAYER_SCALAR || renderer == RENDERER_LAYER_VECTOR || renderer == RENDERER_LAYER_DDA) {
-      size_t layer_index = std::size(volume.info.layers) - layer_renderer_layer - 1;
-      used_blocks = volume.info.layers[layer_index].width_in_nodes * volume.info.layers[layer_index].height_in_nodes * volume.info.layers[layer_index].depth_in_nodes;
-    }
-
     switch (renderer) {
       case RENDERER_LAYER_DDA:
         render_scalar(window.width(), window.height(), fov, vmt, raster.data(), [&](const Ray &ray) {
@@ -380,15 +340,9 @@ void vizualization_app(const char *processed_volume, const char *processed_metad
       case RENDERER_TREE_SCALAR: {
         glm::mat4 mt = model * texture;
         render_scalar(window.width(), window.height(), fov, vmt, raster.data(), [&](const Ray &ray) {
-          return integrate_tree_slab(volume, ray, step, terminate_thresh, transfer_function_scalar, [&](const glm::vec3 &cell, uint8_t layer) {
-            float cell_size = exp2i(-layer);
-            float child_size = exp2i(-layer - 1);
-
-            glm::vec3 cell_center = mt * glm::vec4(cell + child_size, 1.f);  // convert to world space
-
-            float block_distance = glm::distance(camera_pos, cell_center) + bias;
-
-            return layer == std::size(volume.info.layers) - 1 || cell_size <= block_distance * projected_size;
+          return integrate_tree_slab(volume, ray, step, terminate_thresh, transfer_function_scalar, [&](const float &alpha, uint8_t layer) {
+            float desired_layer = -log2(1 - alpha) * quality;
+            return layer == std::size(volume.info.layers) - 1 || desired_layer <= layer;
           });
         });
       }
@@ -397,22 +351,9 @@ void vizualization_app(const char *processed_volume, const char *processed_metad
 
       case RENDERER_TREE_VECTOR: {
         render_simd(window.width(), window.height(), fov, vmt, raster.data(), [&](const simd::Ray &ray, const simd::float_m &mask) {
-          return integrate_tree_slab_simd(volume, ray, step, terminate_thresh, mask, transfer_function_vector, [&](const simd::vec3 &cell, uint8_t layer, const simd::float_m &mask) {
-            float cell_size = exp2i(-layer);
-            float child_size = exp2i(-layer - 1);
-
-            simd::float_v block_distance;
-
-            for (uint8_t k = 0; k < simd::len; k++) {
-              if (mask[k]) {
-                glm::vec3 single_cell { cell.x[k], cell.y[k], cell.z[k] };
-                glm::vec3 cell_center = mt * glm::vec4(single_cell + child_size, 1.f);  // convert to world space
-
-                block_distance[k] = glm::distance(camera_pos, cell_center) + bias; // convert to world space
-              }
-            }
-
-            return simd::float_m(layer == std::size(volume.info.layers) - 1) || cell_size <= block_distance * projected_size;
+          return integrate_tree_slab_simd(volume, ray, step, terminate_thresh, mask, transfer_function_vector, [&](const simd::float_v &alpha, uint8_t layer, const simd::float_m &mask) {
+            simd::float_v desired_layer = -log2(simd::float_v(1) - alpha) * quality;
+            return simd::float_m(layer == std::size(volume.info.layers) - 1) || desired_layer <= layer;
           });
         });
       }
@@ -421,30 +362,17 @@ void vizualization_app(const char *processed_volume, const char *processed_metad
 
       case RENDERER_TREE_PACKLET: {
         render_packlet(window.width(), window.height(), fov, vmt, raster.data(), [&](const RayPacklet &ray_packlet, const MaskPacklet &mask_packlet) {
-          return integrate_tree_slab_packlet(volume, ray_packlet, step, terminate_thresh, mask_packlet, transfer_function_vector, [&](const Vec3Packlet &cell_packlet, uint8_t layer, const MaskPacklet &mask_packlet) {
-            float cell_size = exp2i(-layer);
-            float child_size = exp2i(-layer - 1);
-
-            MaskPacklet output_mask_packlet = mask_packlet;
+          return integrate_tree_slab_packlet(volume, ray_packlet, step, terminate_thresh, mask_packlet, transfer_function_vector, [&](const Vec4Packlet &rgba, uint8_t layer, const MaskPacklet &mask) {
+            MaskPacklet output_mask = mask;
 
             for (uint8_t j = 0; j < simd::len; j++) {
-              if (mask_packlet[j].isNotEmpty()) {
-                simd::float_v block_distance;
-
-                for (uint8_t k = 0; k < simd::len; k++) {
-                  if (mask_packlet[j][k]) {
-                    glm::vec3 single_cell { cell_packlet[j].x[k], cell_packlet[j].y[k], cell_packlet[j].z[k] };
-                    glm::vec3 cell_center = mt * glm::vec4(single_cell + child_size, 1.f);  // convert to world space
-
-                    block_distance[k] = glm::distance(camera_pos, cell_center) + bias; // convert to world space
-                  }
-                }
-
-                output_mask_packlet[j] = simd::float_m(layer == std::size(volume.info.layers) - 1) || cell_size <= block_distance * projected_size;
+              if (mask[j].isNotEmpty()) {
+                simd::float_v desired_layer = -log2(simd::float_v(1) - rgba[j].a) * quality;
+                output_mask[j] = simd::float_m(layer == std::size(volume.info.layers) - 1) || desired_layer <= layer;
               }
             }
 
-            return output_mask_packlet;
+            return output_mask;
           });
         });
       }
