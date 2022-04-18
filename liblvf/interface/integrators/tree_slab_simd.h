@@ -106,7 +106,7 @@ simd::vec4 integrate_tree_slab_simd(const TreeVolume<T, N> &volume, const simd::
       }
 
       // Numeric integration
-      if (simd::float_m should_integrate = mask & integrate_predicate(cell, layer, mask); should_integrate.isNotEmpty()) {
+      if (simd::float_m should_integrate = mask & integrate_predicate(dst.a, layer, mask); should_integrate.isNotEmpty()) {
 
         mask &= !should_integrate;
 
@@ -115,7 +115,7 @@ simd::vec4 integrate_tree_slab_simd(const TreeVolume<T, N> &volume, const simd::
         simd::vec3 shift = (ray.origin - cell) * coef;
         simd::vec3 mult = ray.direction * coef;
 
-        for (should_integrate &= slab_range.max < range.max; should_integrate.isNotEmpty(); should_integrate &= slab_range.max < range.max) {
+        for (should_integrate &= slab_range.max < range.max; should_integrate.isNotEmpty(); should_integrate &= slab_range.max < range.max && dst.a > terminate_thresh) {
           simd::vec3 in_block_pos = slab_range.max * mult + shift;
 
           simd::float_v slab_end_value = sample(volume, block_handle, in_block_pos.x, in_block_pos.y, in_block_pos.z, should_integrate);

@@ -77,7 +77,7 @@ glm::vec4 integrate_tree_slab(const TreeVolume<T, N> &volume, const Ray &ray, fl
         return false;
       }
 
-      if (integrate_predicate(cell, layer)) {
+      if (integrate_predicate(dst.a, layer)) {
 
         float coef = exp2i(layer) * float(TreeVolume<T, N>::SUBVOLUME_SIDE);
         glm::vec3 shift = (ray.origin - cell) * coef;
@@ -94,6 +94,11 @@ glm::vec4 integrate_tree_slab(const TreeVolume<T, N> &volume, const Ray &ray, fl
           slab_start_value = slab_end_value;
           slab_range.min = slab_range.max;
           slab_range.max = slab_range.max + step;
+
+          // Early ray termination
+          if (dst.a < terminate_thresh) {
+            break;
+          }
         }
 
         return false;
