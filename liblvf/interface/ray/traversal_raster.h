@@ -9,9 +9,6 @@
 #include <array>
 
 template <typename F>
-concept RayRasterTraversalCallback = std::invocable<F, const RayRange &, const glm::vec3>;
-
-template <RayRasterTraversalCallback F>
 inline void ray_raster_traversal(const Ray &ray, const RayRange &range, const F& callback) {
   glm::vec3 pos = ray.origin + ray.direction * range.min;
 

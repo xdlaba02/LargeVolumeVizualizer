@@ -13,9 +13,6 @@
 #include <concepts>
 
 template <typename F>
-concept RayOctreeTraversalSimdCallback = std::invocable<F, const simd::RayRange &, const simd::vec3 &, uint32_t, simd::float_m &>;
-
-template <RayOctreeTraversalSimdCallback F>
 void ray_octree_traversal(const simd::Ray &ray, const simd::RayRange &range, simd::vec3 cell, uint32_t layer, simd::float_m mask, const F &callback) {
   callback(range, cell, layer, mask);
 

@@ -292,7 +292,7 @@ void vizualization_benchmark(const char *raw_volume_file_name, const char *trans
       layer_times[desired_layer].mse_packlet += MSE(raster_reference.data(), raster.data(), window_size);
     }
 
-    for (float quality: {0.1f, 0.2f, 0.3f, 0.4f, 0.5f, 0.6f, 0.7f, 0.8f, 0.9f ,1.f, 2.f, 4.f, 6.f, 8.f, 10.f, 12.f, 14.f, 16.f, 18.f, 20.f}) {
+    for (float quality: {1.f, 2.f, 4.f, 6.f, 8.f, 10.f, 12.f, 14.f, 16.f, 18.f, 20.f, 22.f, 24.f, 26.f, 28.f, 30.f, 32.f, 34.f}) {
       render_scalar(window_width, window_height, viewport_fov, vmt, raster.data(), [&](const Ray &ray) {
         return integrate_tree_slab(volume, ray, step, terminate_thresh, transfer_function_scalar, [&](const float &alpha, uint32_t layer) {
           float desired_layer = -log2(1 - alpha) * quality;
@@ -331,7 +331,7 @@ void vizualization_benchmark(const char *raw_volume_file_name, const char *trans
 
       render_packlet(window_width, window_height, viewport_fov, vmt, raster.data(), [&](const RayPacklet &ray_packlet, const MaskPacklet &mask_packlet) {
         return integrate_tree_slab_packlet(volume, ray_packlet, step, terminate_thresh, mask_packlet, transfer_function_vector, [&](const Vec4Packlet &rgba, uint32_t layer, const MaskPacklet &mask) {
-          MaskPacklet output_mask = mask;
+          MaskPacklet output_mask {};
 
           for (uint8_t j = 0; j < simd::len; j++) {
             if (mask[j].isNotEmpty()) {
@@ -347,7 +347,7 @@ void vizualization_benchmark(const char *raw_volume_file_name, const char *trans
       quality_times[quality].time_packlet += measure_ms([&]{
         render_packlet(window_width, window_height, viewport_fov, vmt, raster.data(), [&](const RayPacklet &ray_packlet, const MaskPacklet &mask_packlet) {
           return integrate_tree_slab_packlet(volume, ray_packlet, step, terminate_thresh, mask_packlet, transfer_function_vector, [&](const Vec4Packlet &rgba, uint32_t layer, const MaskPacklet &mask) {
-            MaskPacklet output_mask = mask;
+            MaskPacklet output_mask {};
 
             for (uint8_t j = 0; j < simd::len; j++) {
               if (mask[j].isNotEmpty()) {
@@ -392,10 +392,10 @@ void vizualization_benchmark(const char *raw_volume_file_name, const char *trans
 
 template <typename T>
 void benchmarks(const char *raw_volume_file_name, const char *transfer_function_file_name, uint32_t width, uint32_t height, uint32_t depth, float step, uint32_t image_width, uint32_t image_height) {
-  //vizualization_benchmark<T, 4>(raw_volume_file_name, transfer_function_file_name, width, height, depth, step, image_width, image_height);
-  //vizualization_benchmark<T, 5>(raw_volume_file_name, transfer_function_file_name, width, height, depth, step, image_width, image_height);
-  //vizualization_benchmark<T, 6>(raw_volume_file_name, transfer_function_file_name, width, height, depth, step, image_width, image_height);
-  //vizualization_benchmark<T, 7>(raw_volume_file_name, transfer_function_file_name, width, height, depth, step, image_width, image_height);
+  vizualization_benchmark<T, 4>(raw_volume_file_name, transfer_function_file_name, width, height, depth, step, image_width, image_height);
+  vizualization_benchmark<T, 5>(raw_volume_file_name, transfer_function_file_name, width, height, depth, step, image_width, image_height);
+  vizualization_benchmark<T, 6>(raw_volume_file_name, transfer_function_file_name, width, height, depth, step, image_width, image_height);
+  vizualization_benchmark<T, 7>(raw_volume_file_name, transfer_function_file_name, width, height, depth, step, image_width, image_height);
   vizualization_benchmark<T, 8>(raw_volume_file_name, transfer_function_file_name, width, height, depth, step, image_width, image_height);
 }
 
