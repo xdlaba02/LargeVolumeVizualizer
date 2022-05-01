@@ -10,7 +10,6 @@
 
 #include <array>
 
-// Interactive isosurface ray tracing of large octree volumes
 template <typename F>
 void ray_octree_traversal(const Ray &ray, const RayRange &range, glm::vec3 cell, uint32_t layer, const F &callback) {
   if (callback(range, cell, layer)) {
