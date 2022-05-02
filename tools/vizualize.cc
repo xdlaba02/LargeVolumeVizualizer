@@ -150,7 +150,6 @@ void vizualization_app(const char *processed_volume, const char *processed_metad
 
   float step = 0.001f;
   float quality = 1.f;
-  float bias = 0.0f;
   float fov = 90.f;
   int layer_renderer_layer = 0;
   float terminate_thresh = 0.01f;
@@ -318,11 +317,7 @@ void vizualization_app(const char *processed_volume, const char *processed_metad
 
     glm::mat4 view = glm::lookAt(camera_pos, camera_pos + camera_front, camera_up);
 
-    glm::mat4 mt = model * texture;
-
-    glm::mat4 vmt = view * mt; // converts volume from world space to camera space
-
-    float projected_size = quality * TreeVolume<T, N>::BLOCK_SIDE / glm::distance(camera_pos, volume_pos); // projected size ve stredu. Vepredu budou jemnejsi bloky, vzadu hrubsi
+    glm::mat4 vmt = view * model * texture; // converts volume from world space to camera space
 
     switch (renderer) {
       case RENDERER_LAYER_DDA:
@@ -344,7 +339,6 @@ void vizualization_app(const char *processed_volume, const char *processed_metad
       break;
 
       case RENDERER_TREE_SCALAR: {
-        glm::mat4 mt = model * texture;
         render_scalar(window.width(), window.height(), fov, vmt, raster.data(), [&](const Ray &ray) {
           return integrate_tree_slab(volume, ray, step, terminate_thresh, transfer_function_scalar, [&](const float &alpha, uint8_t layer) {
             float desired_layer = -log2(1 - alpha) * quality;
