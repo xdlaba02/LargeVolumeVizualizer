@@ -1,3 +1,12 @@
+/**
+* @file sampler.h
+* @author Drahomír Dlabaja (xdlaba02)
+* @date 2. 5. 2022
+* @copyright 2022 Drahomír Dlabaja
+* @brief Functions for sampling 2D texture with bilinear interpolation.
+* Could be used to sample multiple same-size textures.
+*/
+
 #pragma once
 
 #include "texture2D.h"

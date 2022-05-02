@@ -1,3 +1,12 @@
+/**
+* @file processor.h
+* @author Drahomír Dlabaja (xdlaba02)
+* @date 2. 5. 2022
+* @copyright 2022 Drahomír Dlabaja
+* @brief Function for processing volumes into tree volume representation.
+* The function creates two files representing data and metadata.
+*/
+
 #pragma once
 
 #include "tree_volume.h"

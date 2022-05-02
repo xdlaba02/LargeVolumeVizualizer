@@ -1,9 +1,15 @@
+/**
+* @file vizualize.cc
+* @author Drahomír Dlabaja (xdlaba02)
+* @date 2. 5. 2022
+* @copyright 2022 Drahomír Dlabaja
+* @brief Tool for tree volume vizualization.
+*/
+
 #include "tf1d.h"
 #include "glfw.h"
 
 #include <tree_volume/tree_volume.h>
-
-#include <utils/scan_tree.h>
 
 #include <renderers/scalar.h>
 #include <renderers/simd.h>

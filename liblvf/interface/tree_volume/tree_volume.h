@@ -1,3 +1,13 @@
+/**
+* @file tree_volume.h
+* @author Drahomír Dlabaja (xdlaba02)
+* @date 2. 5. 2022
+* @copyright 2022 Drahomír Dlabaja
+* @brief Class that maps tree volume files into the virtual memory.
+* The class provides structure that describes memory layout of the metadata file.
+* The metadata file describes layout of the data file.
+*/
+
 #pragma once
 
 #include <utils/mapped_file.h>

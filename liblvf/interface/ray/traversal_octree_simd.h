@@ -1,3 +1,12 @@
+/**
+* @file traversal_octree_simd.h
+* @author Drahomír Dlabaja (xdlaba02)
+* @date 2. 5. 2022
+* @copyright 2022 Drahomír Dlabaja
+* @brief Generic function for traversing an octree with a vecotr of rays.
+* This is just more ugly vectorized variant of traversal_octree.h, which contains all the important comments.
+*/
+
 #pragma once
 
 #include "ray_simd.h"
@@ -20,7 +29,6 @@ void ray_octree_traversal(const simd::Ray &ray, const simd::RayRange &range, sim
     return;
   }
 
-  // TODO precompute?
   float child_size = exp2i(-layer - 1);
 
   simd::vec3 center;

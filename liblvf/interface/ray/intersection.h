@@ -1,3 +1,11 @@
+/**
+* @file intersection.h
+* @author Drahomír Dlabaja (xdlaba02)
+* @date 2. 5. 2022
+* @copyright 2022 Drahomír Dlabaja
+* @brief Function that performs intersection of ray with a bounding box.
+*/
+
 #pragma once
 
 #include "ray.h"

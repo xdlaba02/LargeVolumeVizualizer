@@ -1,3 +1,11 @@
+/**
+* @file intersection_simd.h
+* @author Drahomír Dlabaja (xdlaba02)
+* @date 2. 5. 2022
+* @copyright 2022 Drahomír Dlabaja
+* @brief Function that performs intersection of vector of rays with vector of bounding boxes.
+*/
+
 #pragma once
 
 #include "ray_simd.h"

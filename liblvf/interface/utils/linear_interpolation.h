@@ -1,3 +1,11 @@
+/**
+* @file linear_interpolation.h
+* @author Drahomír Dlabaja (xdlaba02)
+* @date 2. 5. 2022
+* @copyright 2022 Drahomír Dlabaja
+* @brief Generic template function that performs trilinear interpolation with 7 linear interpolations.
+*/
+
 #pragma once
 
 #include <cstdint>

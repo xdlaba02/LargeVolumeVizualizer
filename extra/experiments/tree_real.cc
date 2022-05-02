@@ -6,8 +6,6 @@
 #include <tree_volume/tree_volume.h>
 #include <tree_volume/processor.h>
 
-#include <utils/scan_tree.h>
-
 #include <renderers/scalar.h>
 #include <renderers/simd.h>
 #include <renderers/packlet.h>

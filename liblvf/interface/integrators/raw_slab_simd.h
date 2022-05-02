@@ -1,3 +1,11 @@
+/**
+* @file raw_slab_simd.h
+* @author Drahomír Dlabaja (xdlaba02)
+* @date 2. 5. 2022
+* @copyright 2022 Drahomír Dlabaja
+* @brief Function that integrates raw volume with a vector of rays.
+*/
+
 #pragma once
 
 #include <raw_volume/raw_volume.h>

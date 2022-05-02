@@ -1,3 +1,11 @@
+/**
+* @file sampler.h
+* @author Drahomír Dlabaja (xdlaba02)
+* @date 2. 5. 2022
+* @copyright 2022 Drahomír Dlabaja
+* @brief Function that samples raw volume with trilinear interpolation.
+*/
+
 #pragma once
 
 #include "raw_volume.h"

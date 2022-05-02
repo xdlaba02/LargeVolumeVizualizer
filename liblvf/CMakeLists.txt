@@ -1,3 +1,7 @@
+# @author Drahomír Dlabaja (xdlaba02)
+# @date 2. 5. 2022
+# @copyright 2022 Drahomír Dlabaja
+
 cmake_minimum_required(VERSION 3.20)
 
 add_subdirectory(external)

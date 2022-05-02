@@ -1,3 +1,12 @@
+/**
+* @file tree_slab_layer.h
+* @author Drahomír Dlabaja (xdlaba02)
+* @date 2. 5. 2022
+* @copyright 2022 Drahomír Dlabaja
+* @brief Function that integrates one layer of a tree volume with a ray.
+*/
+
+
 #pragma once
 
 #include <tree_volume/tree_volume.h>

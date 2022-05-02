@@ -1,3 +1,12 @@
+/**
+* @file ray_generator.h
+* @author Drahomír Dlabaja (xdlaba02)
+* @date 2. 5. 2022
+* @copyright 2022 Drahomír Dlabaja
+* @brief Class that generates persepective rays for pixels on screen.
+* The rays are in view space and can be further altered by generic transform matrices.
+*/
+
 #pragma once
 
 #include <glm/glm.hpp>

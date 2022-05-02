@@ -1,3 +1,12 @@
+/**
+* @file morton_curve.h
+* @author Drahomír Dlabaja (xdlaba02)
+* @date 2. 5. 2022
+* @copyright 2022 Drahomír Dlabaja
+* @brief Generic template function that converts coordinates between 3D space and Morton space.
+* It find all the "magic numbers" at compile time and utilized template recursion, so it should be as fast as direcly written function.
+*/
+
 #pragma once
 
 #include <cstdint>

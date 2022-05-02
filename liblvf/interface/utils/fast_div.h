@@ -1,3 +1,15 @@
+/**
+* @file fast_div.h
+* @author Drahomír Dlabaja (xdlaba02)
+* @date 2. 5. 2022
+* @copyright 2022 Drahomír Dlabaja
+* @brief This one is a bit weird, but it is used to perform approximative integer division by a non-power-of-two constant via mults and shifts.
+* I found out that although my compiler does this with normal 32 bit integers automatically, it does not do it with vector types.
+* Those functions search for the best combination of the mult and shift values for specific denominator and type at compile time.
+* Compilation is slow as heck, but it is much faster than the generic integer division when determining block that sample falls into while sampling blocked volume with duplicated edges.
+* The precision is bad but it should be more than enough for our volume sizes.
+*/
+
 #pragma once
 
 #include <cstdint>

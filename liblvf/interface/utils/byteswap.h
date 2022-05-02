@@ -1,3 +1,12 @@
+/**
+* @file byteswap.h
+* @author Drahomír Dlabaja (xdlaba02)
+* @date 2. 5. 2022
+* @copyright 2022 Drahomír Dlabaja
+* @brief Template function for swapping data endianity fast.
+* GCC should implement this in future versions tho.
+*/
+
 #pragma once
 
 #include <type_traits>

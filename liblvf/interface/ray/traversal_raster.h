@@ -1,3 +1,12 @@
+/**
+* @file traversal_raster.h
+* @author Drahomír Dlabaja (xdlaba02)
+* @date 2. 5. 2022
+* @copyright 2022 Drahomír Dlabaja
+* @brief Experimental function that traverses raster defined by integer numbers grid along ray on specified interval.
+* This traversal is broken but in theory, it isn't. One must imagine Sisyphus happy.
+*/
+
 #pragma once
 
 #include "ray.h"
@@ -12,7 +21,8 @@ template <typename F>
 inline void ray_raster_traversal(const Ray &ray, const RayRange &range, const F& callback) {
   glm::vec3 pos = ray.origin + ray.direction * range.min;
 
-  glm::vec<3, uint32_t> block = glm::vec<3, uint32_t>(pos); // this is wrong for negative directions because block[i] might be == to size[i], otherwise it should work
+  // this is wrong for negative directions because block[i] might be == to size[i], otherwise it should work
+  glm::vec<3, uint32_t> block = glm::vec<3, uint32_t>(pos);
 
   glm::vec3 next_max = (glm::vec3(block) - ray.origin) * ray.direction_inverse;
 

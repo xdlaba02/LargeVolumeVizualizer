@@ -1,3 +1,11 @@
+/**
+* @file mapped_file.h
+* @author Drahomír Dlabaja (xdlaba02)
+* @date 2. 5. 2022
+* @copyright 2022 Drahomír Dlabaja
+* @brief RAII wrapper for unix mmapped files.
+*/
+
 #pragma once
 
 #include <sys/types.h>

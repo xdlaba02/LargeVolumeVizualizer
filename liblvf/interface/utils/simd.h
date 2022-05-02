@@ -1,3 +1,11 @@
+/**
+* @file simd.h
+* @author Drahomír Dlabaja (xdlaba02)
+* @date 2. 5. 2022
+* @copyright 2022 Drahomír Dlabaja
+* @brief Vector types and helper operations for them.
+*/
+
 #pragma once
 
 #include "fast_div.h"

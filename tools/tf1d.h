@@ -1,3 +1,11 @@
+/**
+* @file tf1d.h
+* @author Drahomír Dlabaja (xdlaba02)
+* @date 2. 5. 2022
+* @copyright 2022 Drahomír Dlabaja
+* @brief Function for loading transfer function files.
+*/
+
 #pragma once
 
 #include <glm/glm.hpp>

@@ -1,3 +1,10 @@
+/**
+* @file process.cc
+* @author Drahomír Dlabaja (xdlaba02)
+* @date 2. 5. 2022
+* @copyright 2022 Drahomír Dlabaja
+* @brief Tool for processing raw volumes into tree volume files.
+*/
 
 #include <raw_volume/raw_volume.h>
 

@@ -1,3 +1,12 @@
+/**
+* @file sampler.h
+* @author Drahomír Dlabaja (xdlaba02)
+* @date 2. 5. 2022
+* @copyright 2022 Drahomír Dlabaja
+* @brief Functions that sample three volume with trilinear interpolation.
+* User can sample whole volume, which is quite slow, or sample specific block.
+*/
+
 #pragma once
 
 #include "tree_volume.h"

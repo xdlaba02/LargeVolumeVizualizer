@@ -1,3 +1,12 @@
+/**
+* @file tree_slab_layer_dda.h
+* @author Drahomír Dlabaja (xdlaba02)
+* @date 2. 5. 2022
+* @copyright 2022 Drahomír Dlabaja
+* @brief Experimental function that integrates specific layer of a tree volume with modified DDA algorithm that rasterizes ray into the 3D grid.
+* This integrator is broken but in theory, it is quite fast because you find intersected block once and then integrate it with many samples.
+*/
+
 #pragma once
 
 #include <tree_volume/tree_volume.h>

@@ -1,3 +1,11 @@
+/**
+* @file scalar.h
+* @author Drahomír Dlabaja (xdlaba02)
+* @date 2. 5. 2022
+* @copyright 2022 Drahomír Dlabaja
+* @brief Function that generates rays for a viewport with specific persepective projection and view matrix.
+*/
+
 #pragma once
 
 #include <utils/ray_generator.h>

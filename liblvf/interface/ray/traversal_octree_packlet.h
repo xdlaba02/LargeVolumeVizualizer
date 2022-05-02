@@ -1,3 +1,12 @@
+/**
+* @file traversal_octree_packlet.h
+* @author Drahomír Dlabaja (xdlaba02)
+* @date 2. 5. 2022
+* @copyright 2022 Drahomír Dlabaja
+* @brief Generic function for traversing an octree with a packlet of rays.
+* This is just extremely ugly packletized variant of traversal_octree.h, which contains all the important comments.
+*/
+
 #pragma once
 
 #include "ray_simd.h"
@@ -11,17 +20,14 @@
 
 #include <array>
 
-// Sqaure packlet of simd::len * simd::len rays.
-using RayPacklet = std::array<simd::Ray, simd::len>;
-using MaskPacklet = std::array<simd::float_m, simd::len>;
+// Packlets are just arrays of vector variants so no namespace
+using RayPacklet      = std::array<simd::Ray, simd::len>;
+using MaskPacklet     = std::array<simd::float_m, simd::len>;
 using RayRangePacklet = std::array<simd::RayRange, simd::len>;
-using Vec3Packlet = std::array<simd::vec3, simd::len>;
-using Vec4Packlet = std::array<simd::vec4, simd::len>;
-using AxisPacklet = std::array<std::array<simd::uint32_v, 3>, simd::len>;
-using FloatPacklet = std::array<simd::float_v, simd::len>;
-
-template <typename F>
-concept rayOctreeTraversalPackletCallback = std::invocable<F, const RayPacklet &, const Vec3Packlet &, uint8_t, MaskPacklet &>;
+using Vec3Packlet     = std::array<simd::vec3, simd::len>;
+using Vec4Packlet     = std::array<simd::vec4, simd::len>;
+using AxisPacklet     = std::array<std::array<simd::uint32_v, 3>, simd::len>;
+using FloatPacklet    = std::array<simd::float_v, simd::len>;
 
 template <typename F>
 void ray_octree_traversal(const RayPacklet &ray_packlet, const RayRangePacklet &range_packlet, Vec3Packlet cell_packlet, uint8_t layer, MaskPacklet mask_packlet, const F &callback) {

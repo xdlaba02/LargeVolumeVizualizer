@@ -1,3 +1,10 @@
+/**
+* @file vizualize_raw.h
+* @author Drahomír Dlabaja (xdlaba02)
+* @date 2. 5. 2022
+* @copyright 2022 Drahomír Dlabaja
+* @brief Tool for raw volume vizualization.
+*/
 
 #include "glfw.h"
 #include "tf1d.h"

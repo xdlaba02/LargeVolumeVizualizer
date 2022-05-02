@@ -1,3 +1,11 @@
+/**
+* @file texture2D.h
+* @author Drahomír Dlabaja (xdlaba02)
+* @date 2. 5. 2022
+* @copyright 2022 Drahomír Dlabaja
+* @brief Class representing generic, simple and slow 2D texture.
+*/
+
 #pragma once
 
 #include <cstdint>

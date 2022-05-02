@@ -1,3 +1,11 @@
+/**
+* @file glm_simd.h
+* @author Drahomír Dlabaja (xdlaba02)
+* @date 2. 5. 2022
+* @copyright 2022 Drahomír Dlabaja
+* @brief Vectorized glm types that are used trough the library.
+*/
+
 #pragma once
 
 #include "simd.h"

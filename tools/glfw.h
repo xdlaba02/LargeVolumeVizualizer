@@ -1,3 +1,11 @@
+/**
+* @file glfw.h
+* @author Drahomír Dlabaja (xdlaba02)
+* @date 2. 5. 2022
+* @copyright 2022 Drahomír Dlabaja
+* @brief Class for abstracting out IO via GLFW library.
+*/
+
 #pragma once
 
 #include <GLFW/glfw3.h>

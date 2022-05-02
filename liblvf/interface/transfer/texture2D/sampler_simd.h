@@ -1,3 +1,11 @@
+/**
+* @file sampler_simd.h
+* @author Drahomír Dlabaja (xdlaba02)
+* @date 2. 5. 2022
+* @copyright 2022 Drahomír Dlabaja
+* @brief Vectorized functions for sampling 2D texture with bilinear interpolation.
+*/
+
 #pragma once
 
 #include "texture2D.h"

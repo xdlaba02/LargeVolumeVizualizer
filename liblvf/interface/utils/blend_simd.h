@@ -1,3 +1,11 @@
+/**
+* @file blend_simd.h
+* @author Drahomír Dlabaja (xdlaba02)
+* @date 2. 5. 2022
+* @copyright 2022 Drahomír Dlabaja
+* @brief Functin that performs integration step with specific size and blends the result into the output utilizing vectorization.
+*/
+
 #pragma once
 
 #include <utils/glm_simd.h>

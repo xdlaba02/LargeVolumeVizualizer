@@ -1,3 +1,11 @@
+/**
+* @file raw_volume.h
+* @author Drahomír Dlabaja (xdlaba02)
+* @date 2. 5. 2022
+* @copyright 2022 Drahomír Dlabaja
+* @brief Class that maps raw volume file into the virtual memory.
+*/
+
 #pragma once
 
 #include <utils/mapped_file.h>

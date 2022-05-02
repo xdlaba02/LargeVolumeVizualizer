@@ -1,3 +1,12 @@
+/**
+* @file fast_exp2.h
+* @author Drahomír Dlabaja (xdlaba02)
+* @date 2. 5. 2022
+* @copyright 2022 Drahomír Dlabaja
+* @brief This performs 2^i with signed integer exponent just by literally adding the exponent into the floating point value exponent part.
+* It is mostly precise, but it breaks on extremes.
+*/
+
 #pragma once
 
 #include <cstdint>
