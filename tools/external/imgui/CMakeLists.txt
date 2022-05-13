@@ -1,4 +1,9 @@
-cmake_minimum_required(VERSION 3.20)
+# @author Drahomír Dlabaja (xdlaba02)
+# @date 2. 5. 2022
+# @copyright 2022 Drahomír Dlabaja
+
+cmake_minimum_required(VERSION 3.17)
+
 add_library(imgui imgui/imgui.cpp
                   imgui/imgui_draw.cpp
                   imgui/imgui_tables.cpp

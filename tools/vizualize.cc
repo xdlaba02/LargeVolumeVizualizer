@@ -163,14 +163,11 @@ void vizualization_app(const char *processed_volume, const char *processed_metad
     RENDERER_TREE_PACKLET,
   } renderer = RENDERER_TREE_VECTOR;
 
-  float t = 0.f;
   auto prev_time = std::chrono::steady_clock::now();
   while (!window.shouldClose()) {
     auto time = std::chrono::steady_clock::now();
     float delta = std::chrono::duration_cast<std::chrono::milliseconds>(time - prev_time).count() / 1000.f;
     prev_time = time;
-
-    t += delta;
 
     // INPUT HANDLING PART
 
@@ -351,7 +348,7 @@ void vizualization_app(const char *processed_volume, const char *processed_metad
 
       case RENDERER_TREE_VECTOR: {
         render_simd(window.width(), window.height(), fov, vmt, raster.data(), [&](const simd::Ray &ray, const simd::float_m &mask) {
-          return integrate_tree_slab_simd(volume, ray, step, terminate_thresh, mask, transfer_function_vector, [&](const simd::float_v &alpha, uint8_t layer, const simd::float_m &mask) {
+          return integrate_tree_slab_simd(volume, ray, step, terminate_thresh, mask, transfer_function_vector, [&](const simd::float_v &alpha, uint8_t layer, const simd::float_m &) {
             simd::float_v desired_layer = -log2(simd::float_v(1) - alpha) * quality;
             return simd::float_m(layer == std::size(volume.info.layers) - 1) || desired_layer <= layer;
           });

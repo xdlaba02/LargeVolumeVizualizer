@@ -124,16 +124,11 @@ void vizualization_app(const char *raw_volume_file_name, const char *transfer_fu
   float fov = 45.f;
   float terminate_thresh = 0.01f;
 
-  float t = 0.f;
   auto prev_time = std::chrono::steady_clock::now();
   while (!window.shouldClose()) {
     auto time = std::chrono::steady_clock::now();
     float delta = std::chrono::duration_cast<std::chrono::milliseconds>(time - prev_time).count() / 1000.f;
     prev_time = time;
-
-    std::cerr << 1 / delta << " FPS\n";
-
-    t += delta;
 
     {
       glm::vec2 pos;
