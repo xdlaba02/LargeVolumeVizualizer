@@ -62,6 +62,9 @@ This way, the transfer function works both for 8-bit and 16-bit data.
 Color points ``<red>``, ``<green>`` and ``<blue>`` are values fron interval <0, 1> that together represents one color from rgb color space.
 Alpha values ``<alpha>`` are positive values that define coefficient of the opacity of the sample, meaning higher values is more opaque.
 
+## License
+See [LICENSE](LICENSE) for license and copyright information.
+
 ## References
 [1] Dlabaja, D.: Zobrazení rozsáhlých volumetrických dat na CPU. Brno, 2021. Diplomová práce. Vysoké učení technické v Brně, Fakulta informačních technologií. Vedoucí práce
 Ing. Michal Španěl, Ph.D.
