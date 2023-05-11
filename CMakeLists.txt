@@ -1,18 +1,26 @@
 # @author Drahomír Dlabaja (xdlaba02)
-# @date 2. 5. 2022
-# @copyright 2022 Drahomír Dlabaja
+# @date 11. 5. 2023
+# @copyright 2023 Drahomír Dlabaja
 
-cmake_minimum_required(VERSION 3.17)
+cmake_minimum_required(VERSION 3.20)
 
 project(LargeVolumeVizualizer)
 
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED True)
+set(CMAKE_COLOR_DIAGNOSTICS       ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-set(CMAKE_CXX_FLAGS "-Wall -Wextra -pedantic -Wfatal-errors")
-set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g")
-set(CMAKE_CXX_FLAGS_RELEASE "-O3 -fopenmp -march=native -DNDEBUG -s")
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+	add_compile_options(-Wall -Wextra -Wpedantic -Wfatal-errors)
+	add_compile_options($<$<CONFIG:RELEASE>:-fopenmp>)
+	add_compile_options($<$<CONFIG:RELEASE>:-march=native>)
 
-add_subdirectory(liblvf)
+	add_link_options($<$<CONFIG:RELEASE>:-fopenmp>)
+endif()
+
+# Default constructors for glm > 0.9.9.0
+add_compile_definitions(GLM_FORCE_CTOR_INIT)
+
+set(liblvf_DIR ${CMAKE_CURRENT_SOURCE_DIR}/liblvf)
+
 add_subdirectory(tools)
 add_subdirectory(extra)

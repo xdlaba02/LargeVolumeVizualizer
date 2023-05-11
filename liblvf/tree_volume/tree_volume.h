@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <vector>
 
 template <typename T, uint32_t N>
 class TreeVolume {

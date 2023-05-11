@@ -1,8 +1,8 @@
 /**
 * @file glfw.h
 * @author Drahomír Dlabaja (xdlaba02)
-* @date 2. 5. 2022
-* @copyright 2022 Drahomír Dlabaja
+* @date 11. 5. 2023
+* @copyright 2023 Drahomír Dlabaja
 * @brief Class for abstracting out IO via GLFW library.
 */
 
@@ -10,9 +10,9 @@
 
 #include <GLFW/glfw3.h>
 
-#include <imgui/imgui.h>
-#include <imgui/backends/imgui_impl_glfw.h>
-#include <imgui/backends/imgui_impl_opengl2.h>
+#include <imgui.h>
+#include <bindings/imgui_impl_glfw.h>
+#include <bindings/imgui_impl_opengl2.h>
 
 #include <cstdint>
 
