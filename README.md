@@ -3,20 +3,11 @@ This is an implementation of a CPU large volume visualization pipeline, which co
 The pipeline is described and evaluated in [1].
 
 ## Compile
-The project depends on ``GCC`` with C++20 implemented. The compilation is organized with the ``cmake`` and ``make`` tools.
-The preparation is fairly straightforward:
+The project depends on ``GCC`` with C++20 implemented. Dependencies are resolved via the the ``conan`` package manager. The compilation utilizes the ``cmake`` tool. The compilation is fairly straightforward:
 
-    mkdir build
-    cd build
-    cmake -DCMAKE_BUILD_TYPE=Release ..
-
-The library and tools can be then compiled with
-
-    make
-
-The project can be cleaned with
-
-    make clean
+    conan install --settings build_type=Release --output-folder build --build missing .
+    cmake --preset conan-release
+    cmake --build --preset conan-release
 
 ## Usage
 The tools can convert and visualize large volumetric datasets.
